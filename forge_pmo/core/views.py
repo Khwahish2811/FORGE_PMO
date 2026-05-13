@@ -77,17 +77,25 @@ def get_all_programs(request):
 @api_view(['POST'])
 def create_program(request):
     try:
-        data = request.data
-        # pyrefly: ignore [missing-attribute]
+        # Debugging prints
+        print(f"FILES: {request.FILES}")
+        print(f"DATA: {request.data}")
+        
         program = Program.objects.create(
-            name=data.get('name'),
-            description=data.get('description'),
-            start_date=data.get('start_date'),
-            end_date=data.get('end_date'),
+            name=request.data.get('name'),
+            description=request.data.get('description'),
+            start_date=request.data.get('start_date'),
+            end_date=request.data.get('end_date'),
+            document=request.FILES.get('document'),
             status='Pending'
         )
-        return Response({"success": True, "id": program.id}, status=201)
+        return Response({
+            "success": True, 
+            "id": program.id, 
+            "document": str(program.document)
+        }, status=201)
     except Exception as e:
+        print(f"CREATE PROGRAM ERROR: {str(e)}")
         return Response({"success": False, "error": str(e)}, status=400)
 
 
@@ -391,6 +399,8 @@ def get_kanban_tasks(request):
                 "program_name": prog.name if proj else "Standard",
                 "project_manager": pm.username if pm else "Not Assigned",
                 "sprint_name": spr.name if spr else "Unassigned",
+                "sprint_id": spr.id if spr else None,
+                "sprint_status": spr.status if spr else "Planned",
                 "priority": t.priority or "Medium",
                 "hours_logged": str(t.hours_logged or 0.00),
                 "due_date": t.due_date.strftime('%Y-%m-%d') if t.due_date else "No Date"
@@ -500,24 +510,29 @@ def update_task_status_with_tracker(request):
 
         task.save()
 
-        # pyrefly: ignore [missing-attribute]
-        project_tasks = Task.objects.filter(project_name=task.project_name)
+        # 2. Update Project and Program status to "In Progress" if first task begins
+        project = task.project
+        if new_status == 'In Progress' and project.status != 'In Progress':
+            project.status = 'In Progress'
+            project.save()
+            
+            program = project.program
+            if program.status != 'In Progress':
+                program.status = 'In Progress'
+                program.save()
+
+        # 3. Progress Calculation
+        project_tasks = Task.objects.filter(project=project)
         total_count = project_tasks.count()
         done_count = project_tasks.filter(status='Done').count()
-
         progress_percent = (done_count / total_count * 100) if total_count > 0 else 0
-
-        # pyrefly: ignore [missing-attribute]
-        Project.objects.filter(name=task.project.name).update(
-
-            status=task.project.status
-        )
 
         return Response({
             "success": True,
             "message": f"Task moved from {old_status} to {new_status}",
             "new_status": task.status,
-            "project_progress": progress_percent
+            "project_progress": progress_percent,
+            "project_status": project.status
         })
 
     # pyrefly: ignore [missing-attribute]
@@ -725,13 +740,20 @@ def get_working_programs(request):
 
             pm_name = project.created_by.username if project else username
 
+            # Completion calculation
+            tasks = Task.objects.filter(project=project) if project else []
+            total_tasks = tasks.count() if project else 0
+            done_tasks = tasks.filter(status='Done').count() if project else 0
+            completion = int((done_tasks / total_tasks) * 100) if total_tasks > 0 else 0
+
             working_programs_data.append({
                 "id": prog.id,
                 "name": prog.name,
                 "start_date": str(prog.start_date) if prog.start_date else "",
                 "end_date": str(prog.end_date) if prog.end_date else "",
                 "pm_name": pm_name,
-                "status": prog.status
+                "status": prog.status,
+                "completion_percentage": completion
             })
 
         return Response(working_programs_data, status=200)
@@ -745,44 +767,75 @@ def get_working_programs(request):
 def program_tracker(request):
     program_id = request.query_params.get('program_id')
     program = get_object_or_404(Program, id=program_id)
-    # pyrefly: ignore [missing-attribute]
+    
+    # All tasks for this program
     tasks = Task.objects.filter(project__program_id=program_id).select_related('assigned_to', 'sprint')
-    recent_activity = []
-    for task in tasks.order_by('-id')[:5]:
-        recent_activity.append({
+    
+    # 1. Recent Logs
+    recent_logs = []
+    for task in tasks.order_by('-id')[:10]:
+        recent_logs.append({
             "user": task.assigned_to.username if task.assigned_to else "Unassigned",
             "sprint": task.sprint.name if task.sprint else "No Sprint",
             "task_name": task.title,
             "due_date": str(task.due_date) if task.due_date else "No Date",
             "status": task.status
         })
-    sprint_data = []
-    # pyrefly: ignore [missing-attribute]
-    unique_sprints = Sprint.objects.filter(project__program_id=program_id).distinct()
+
+    # 2. Velocity Data (Sprint Progress)
+    velocity_data = []
+    unique_sprints = Sprint.objects.filter(project__program_id=program_id).order_by('start_date').distinct()
     for s in unique_sprints:
         s_tasks = tasks.filter(sprint=s)
         total = s_tasks.count()
         done = s_tasks.filter(status__icontains='Done').count()
         progress = round((done / total * 100), 1) if total > 0 else 0
-        sprint_data.append({"name": s.name, "completion": progress})
+        velocity_data.append({"name": s.name, "completion": progress})
+
+    # 3. Task Distribution
     total_tasks = tasks.count()
     completed_tasks = tasks.filter(status__icontains='Done').count()
-    completion_percentage = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
+    pending_tasks = tasks.filter(status__icontains='In Progress').count()
+    todo_tasks = total_tasks - completed_tasks - pending_tasks
+
+    task_distribution = [
+        {"name": "Done", "value": completed_tasks},
+        {"name": "Doing", "value": pending_tasks},
+        {"name": "Todo", "value": todo_tasks}
+    ]
+
+    # 4. Gantt Data
+    gantt_data = []
+    # Project-level bars or Task-level bars? Let's do Sprints as major milestones
+    for s in unique_sprints:
+        s_tasks = tasks.filter(sprint=s)
+        s_total = s_tasks.count()
+        s_done = s_tasks.filter(status__icontains='Done').count()
+        s_prog = (s_done / s_total * 100) if s_total > 0 else 0
+        
+        gantt_data.append({
+            "id": f"sprint_{s.id}",
+            "name": s.name,
+            "start": str(s.start_date) if s.start_date else str(program.start_date),
+            "end": str(s.end_date) if s.end_date else str(program.end_date),
+            "progress": s_prog,
+            "dependencies": []
+        })
+
+    overall_progress = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
+
     return Response({
         "program_name": program.name,
         "pm_name": getattr(program.project_manager_assigned, 'username', "Not Assigned"),
         "total_tasks": total_tasks,
         "completed_tasks": completed_tasks,
-        "pending_tasks": total_tasks - completed_tasks,
-        "completion_percentage": completion_percentage,
+        "pending_tasks": pending_tasks,
+        "overall_progress": overall_progress,
         "team_count": tasks.values('assigned_to').distinct().count(),
-        "sprint_data": sprint_data,
-        "recent_activity": recent_activity,
-        "priority_counts": {
-            "High": tasks.filter(priority='High').count(),
-            "Medium": tasks.filter(priority='Medium').count(),
-            "Low": tasks.filter(priority='Low').count(),
-        }
+        "velocity_data": velocity_data,
+        "task_distribution": task_distribution,
+        "gantt_data": gantt_data,
+        "recent_logs": recent_logs
     })
 
 
@@ -822,3 +875,33 @@ def get_pm_dashboard_stats(request):
         return Response(stats_data)
     except Exception as e:
         return Response(stats_data)
+@api_view(['POST'])
+def update_sprint_status(request):
+    sprint_id = request.data.get('sprint_id')
+    new_status = request.data.get('status')
+    
+    if not sprint_id or not new_status:
+        return Response({"error": "Missing sprint_id or status"}, status=400)
+    
+    try:
+        with transaction.atomic():
+            sprint = Sprint.objects.get(id=sprint_id)
+            sprint.status = new_status
+            sprint.save()
+            
+            if new_status == 'In Progress':
+                project = sprint.project
+                if project.status != 'In Progress':
+                    project.status = 'In Progress'
+                    project.save()
+                
+                program = project.program
+                if program.status != 'In Progress':
+                    program.status = 'In Progress'
+                    program.save()
+                    
+            return Response({"success": True, "message": f"Sprint status updated to {new_status}"})
+    except Sprint.DoesNotExist:
+        return Response({"error": "Sprint not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)

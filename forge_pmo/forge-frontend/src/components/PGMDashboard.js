@@ -56,6 +56,10 @@ const PGMDashboard = ({ username, onLogout }) => {
 
   useEffect(() => {
     fetchData();
+    const interval = setInterval(() => {
+        fetchData();
+    }, 5000); // Auto refresh every 5 seconds
+    return () => clearInterval(interval);
   }, [fetchData]);
 
   // --- 2. Action Handlers (Original Functions Preserved) ---
@@ -68,7 +72,11 @@ const PGMDashboard = ({ username, onLogout }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ program_id: programId, pm_id: pmId, manager_name: username })
       });
-      if (res.ok) { alert("PM Assigned!"); fetchData(); }
+      if (res.ok) { 
+        alert("PM Assigned!"); 
+        fetchData(); 
+        window.location.reload(); 
+      }
     } catch (err) { alert("Error!"); }
   };
 
@@ -83,6 +91,7 @@ const PGMDashboard = ({ username, onLogout }) => {
             alert(`Project ${decision === 'approve' ? 'Approved' : 'Rejected'}!`);
             setShowReviewModal(false);
             fetchData();
+            window.location.reload();
         } else {
             const errorData = await response.json();
             alert("Error: " + (errorData.error || "Action failed"));
@@ -109,6 +118,7 @@ const PGMDashboard = ({ username, onLogout }) => {
         setShowModal(false);
         setFormData({ name: '', description: '', start_date: '', end_date: '', document: null });
         fetchData();
+        window.location.reload();
       }
     } catch (err) { alert("Error connecting to server!"); }
   };
@@ -130,6 +140,7 @@ const PGMDashboard = ({ username, onLogout }) => {
         alert(data.message);
         setShowReviewModal(false);
         fetchData();
+        window.location.reload();
       }
     } catch (error) {
       console.error("Error:", error);
@@ -137,24 +148,42 @@ const PGMDashboard = ({ username, onLogout }) => {
     }
   };
 
-  // --- NEW: Live Track Handler (Integrated for real-time charts) ---
   const handleLiveTrack = async (programId) => {
     setLoadingStats(true);
     try {
-      // Backend should return progress, task counts, sprint trend, and team details
       const res = await fetch(`http://127.0.0.1:8000/api/program-tracker/?program_id=${programId}`);
       if (res.ok) {
         const data = await res.json();
         setSelectedProgramStats(data);
         setShowTrackerModal(true);
       } else {
-        alert("Tracker data not available. Ensure tasks are assigned to this program.");
+        alert("Tracker data not available.");
       }
     } catch (err) {
       alert("Error fetching tracker data.");
     } finally {
       setLoadingStats(false);
     }
+  };
+
+  const handleDownloadReport = () => {
+    if (!selectedProgramStats) return;
+    let csv = "Program Name,Project Manager,Overall Progress,Total Tasks,Completed Tasks,Team Members\n";
+    csv += `"${selectedProgramStats.program_name}","${selectedProgramStats.pm_name}",${selectedProgramStats.overall_progress}%,${selectedProgramStats.total_tasks},${selectedProgramStats.completed_tasks},${selectedProgramStats.team_count}\n\n`;
+    csv += "Sprint Name,Completion %\n";
+    (selectedProgramStats.velocity_data || []).forEach(s => { csv += `"${s.name}",${s.completion}%\n`; });
+    csv += "\nRecent Activity Log\n";
+    csv += "User,Sprint,Task,Due Date,Status\n";
+    (selectedProgramStats.recent_logs || []).forEach(log => { csv += `"${log.user}","${log.sprint}","${log.task_name}","${log.due_date}","${log.status}"\n`; });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('hidden', '');
+    a.setAttribute('href', url);
+    a.setAttribute('download', `${selectedProgramStats.program_name}_Report.csv`);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   return (
@@ -319,7 +348,23 @@ const PGMDashboard = ({ username, onLogout }) => {
                              </div>
                           </td>
                           <td style={tdStyle}>
-                             <span style={{background:'#dcfce7', color:'#166534', padding:'4px 10px', borderRadius:'12px', fontSize:'11px', fontWeight:'bold'}}>IN PROGRESS</span>
+                             {(() => {
+                               const pct = pgm.completion_percentage || 0;
+                               let label = "IN PROGRESS";
+                               let color = "#1e40af";
+                               let bg = "#dbeafe";
+
+                               if (pct === 0) { label = "NOT STARTED"; color = "#64748b"; bg = "#f1f5f9"; }
+                               else if (pct === 100) { label = "COMPLETED"; color = "#166534"; bg = "#dcfce7"; }
+                               else if (pct > 90) { label = "ALMOST DONE"; color = "#854d0e"; bg = "#fef9c3"; }
+                               else { label = `${pct}% COMPLETE`; }
+
+                               return (
+                                 <span style={{ background: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
+                                   {label}
+                                 </span>
+                               );
+                             })()}
                           </td>
                           <td style={tdStyle}>
                             <button
@@ -350,7 +395,15 @@ const PGMDashboard = ({ username, onLogout }) => {
                     <h2 style={{margin:0, color:'#1B3A6B'}}>Live Tracker: {selectedProgramStats.program_name}</h2>
                     <p style={{margin:0, fontSize:'12px', color:'#64748b'}}>Tracking real-time execution for Manager: <b>{selectedProgramStats.pm_name}</b></p>
                  </div>
-                 <button onClick={() => setShowTrackerModal(false)} style={{background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8'}}>✕</button>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <button 
+                      onClick={handleDownloadReport} 
+                      style={{ ...primBtn, background: '#10b981', border: 'none', padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px' }}
+                    >
+                      📥 Download Report
+                    </button>
+                    <button onClick={() => setShowTrackerModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+                  </div>
               </div>
 
               {/* Real-time Summary Cards */}

@@ -100,23 +100,34 @@ const TMDashboard = ({ user, onLogout }) => {
 
         const uniqueProjects = Object.values(projMap);
         setProjects(uniqueProjects);
-        if (uniqueProjects.length > 0 && !selectedProjectId) {
-            setSelectedProjectId(uniqueProjects[0].name);
-        }
       }
     } catch (err) { console.error("Fetch error:", err); }
     finally { setLoading(false); }
   };
 
   useEffect(() => {
+    if (projects.length > 0 && !selectedProjectId) {
+        setSelectedProjectId(projects[0].name);
+    }
+  }, [projects, selectedProjectId]);
+
+  useEffect(() => {
     if (user) {
         fetchTasks();
+        const interval = setInterval(() => {
+            fetchTasks();
+        }, 5000); // Auto refresh every 5 seconds
+        return () => clearInterval(interval);
     }
   }, [user]);
 
   useEffect(() => {
     if (user && selectedProjectId) {
         fetchDashboardStats();
+        const interval = setInterval(() => {
+            fetchDashboardStats();
+        }, 5000); // Auto refresh every 5 seconds
+        return () => clearInterval(interval);
     }
   }, [user, selectedProjectId]);
 
@@ -155,6 +166,7 @@ const TMDashboard = ({ user, onLogout }) => {
           setDailyInput({});
           await fetchTasks();
           await fetchDashboardStats();
+          window.location.reload();
       } else {
           const errorData = await results[0].json();
           alert(`Error: ${errorData.message || "Failed to save effort"}`);
@@ -164,6 +176,25 @@ const TMDashboard = ({ user, onLogout }) => {
     } finally {
         setLoading(false);
     }
+  };
+
+  const updateSprintStatus = async (sprintId, newStatus) => {
+    if (!sprintId) return;
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/update-sprint-status/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sprint_id: sprintId,
+          status: newStatus
+        })
+      });
+      if (response.ok) {
+        await fetchTasks();
+        await fetchDashboardStats();
+        window.location.reload();
+      }
+    } catch (err) { console.error(err); }
   };
 
   const updateStatus = async (taskId, newStatus) => {
@@ -179,6 +210,7 @@ const TMDashboard = ({ user, onLogout }) => {
       if (response.ok) {
           fetchTasks();
           fetchDashboardStats();
+          window.location.reload();
       }
     } catch (err) { console.error(err); }
   };
@@ -345,9 +377,45 @@ const TMDashboard = ({ user, onLogout }) => {
         {/* KANBAN BOARD */}
         <div style={{ padding: '0 25px 25px 25px' }}>
           <h3 style={sectionTitle}>KANBAN BOARD</h3>
-          {Object.keys(tasksBySprint).sort().map(sprintName => (
-            <div key={sprintName} style={{marginBottom: '35px'}}>
-              <div style={sprintDivider}>📦 {sprintName.toUpperCase()}</div>
+          {Object.keys(tasksBySprint).sort().map(sprintName => {
+            const firstTask = tasksBySprint[sprintName][0];
+            const sprintId = firstTask?.sprint_id;
+            const sprintStatus = firstTask?.sprint_status || 'Planned';
+
+            return (
+              <div key={sprintName} style={{marginBottom: '35px'}}>
+                <div style={{...sprintDivider, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <span>📦 {sprintName.toUpperCase()}</span>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                    <span style={{
+                      fontSize: '10px',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      backgroundColor: sprintStatus === 'In Progress' ? '#dbeafe' : '#f1f5f9',
+                      color: sprintStatus === 'In Progress' ? '#1e40af' : '#64748b',
+                      fontWeight: 'bold'
+                    }}>
+                      {sprintStatus.toUpperCase()}
+                    </span>
+                    {sprintStatus === 'Planned' && (
+                      <button 
+                        onClick={() => updateSprintStatus(sprintId, 'In Progress')}
+                        style={{
+                          padding: '4px 12px',
+                          fontSize: '10px',
+                          backgroundColor: '#10B981',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        START SPRINT
+                      </button>
+                    )}
+                  </div>
+                </div>
               <div style={kanbanGrid}>
                 {['To Do', 'In Progress', 'Done'].map(col => (
                   <div key={col} style={columnStyle}>
@@ -383,7 +451,8 @@ const TMDashboard = ({ user, onLogout }) => {
                 ))}
               </div>
             </div>
-          ))}
+          );
+        })}
         </div>
 
         {/* EFFORT LOG */}

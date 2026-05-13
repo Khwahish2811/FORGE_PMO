@@ -10,13 +10,27 @@ class ProgramSerializer(serializers.ModelSerializer):
         source='project_manager_assigned.username',
         default="Not Assigned"
     )
+    completion_percentage = serializers.SerializerMethodField()
 
     class Meta:
         model = Program
         fields = [
             'id', 'name', 'description', 'start_date', 'end_date',
-            'status', 'program_manager_name', 'project_manager_assigned_name', 'document'
+            'status', 'program_manager_name', 'project_manager_assigned_name', 
+            'document', 'completion_percentage'
         ]
+
+    def get_completion_percentage(self, obj):
+        # pyrefly: ignore [missing-attribute]
+        project = Project.objects.filter(program=obj).first()
+        if not project:
+            return 0
+        tasks = Task.objects.filter(project=project)
+        total = tasks.count()
+        if total == 0:
+            return 0
+        done = tasks.filter(status='Done').count()
+        return int((done / total) * 100)
 
 class SprintSerializer(serializers.ModelSerializer):
     todo_count = serializers.SerializerMethodField()

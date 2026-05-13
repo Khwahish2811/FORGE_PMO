@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, LineChart, Line, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, LineChart, Line, AreaChart, Area, CartesianGrid } from 'recharts';
+import { Gantt, ViewMode } from 'gantt-task-react';
+import "gantt-task-react/dist/index.css";
 import { Chart } from "react-google-charts";
 
 // 1. Helper function for health status colors
@@ -51,8 +53,8 @@ const PMDashboard = ({ username, onLogout }) => {
     sprints: [{ name: 'Sprint 1', start_date: '', end_date: '' }],
   });
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const progRes = await fetch(`http://127.0.0.1:8000/api/my-assigned-programs/?username=${username || 'rahul_pm'}`);
       if (progRes.ok) {
@@ -133,6 +135,11 @@ const lastStatItem = {
   useEffect(() => {
     fetchData();
     fetchDashboardStats();
+    const interval = setInterval(() => {
+        fetchData(true);
+        fetchDashboardStats();
+    }, 5000); // Auto refresh every 5 seconds
+    return () => clearInterval(interval);
   }, [fetchData, fetchDashboardStats]);
 
   const toggleRow = (id) => {
@@ -154,10 +161,39 @@ const lastStatItem = {
         setShowTrackerModal(true);
       }
     } catch (err) {
-      alert("Error fetching tracker data.");
+      console.error("Tracker error:", err);
     } finally {
       setLoadingStats(false);
     }
+  };
+
+  const handleDownloadReport = () => {
+    if (!selectedProgramStats) return;
+    
+    // Create CSV content
+    let csv = "Program Name,Project Manager,Overall Progress,Total Tasks,Completed Tasks,Team Members\n";
+    csv += `"${selectedProgramStats.program_name}","${selectedProgramStats.pm_name}",${selectedProgramStats.overall_progress}%,${selectedProgramStats.total_tasks},${selectedProgramStats.completed_tasks},${selectedProgramStats.team_count}\n\n`;
+    
+    csv += "Sprint Name,Completion %\n";
+    selectedProgramStats.velocity_data.forEach(s => {
+      csv += `"${s.name}",${s.completion}%\n`;
+    });
+    
+    csv += "\nRecent Activity Log\n";
+    csv += "User,Sprint,Task,Due Date,Status\n";
+    selectedProgramStats.recent_logs.forEach(log => {
+      csv += `"${log.user}","${log.sprint}","${log.task_name}","${log.due_date}","${log.status}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('hidden', '');
+    a.setAttribute('href', url);
+    a.setAttribute('download', `${selectedProgramStats.program_name}_Report.csv`);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleCreateTask = async (e) => {
@@ -185,6 +221,7 @@ const lastStatItem = {
         setShowTaskModal(false);
         setTaskData({ title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' });
         fetchData();
+        window.location.reload();
       }
     } catch (err) { alert("❌ Connection failed."); }
   };
@@ -200,6 +237,7 @@ const lastStatItem = {
     const nextSprintNum = projectData.sprints.length + 1;
     setProjectData({ ...projectData, sprints: [...projectData.sprints, { name: `Sprint ${nextSprintNum}`, start_date: '', end_date: '' }] });
   };
+  const removeSprintRow = (index) => setProjectData({ ...projectData, sprints: projectData.sprints.filter((_, i) => i !== index) });
   const handleInputChange = (field, value) => setProjectData({ ...projectData, [field]: value });
   const handleMemberChange = (index, field, value) => {
     const newTeam = [...projectData.team];
@@ -227,12 +265,13 @@ const lastStatItem = {
         setShowProjectForm(false);
         setProjectData({ name: '', description: '', start_date: '', end_date: '', priority: 'Medium', team: [{ userId: '', fte: 1.0, role: 'Dev' }], sprints: [{ name: 'Sprint 1', start_date: '', end_date: '' }] });
         fetchData();
+        window.location.reload();
       }
     } catch (err) { alert("Connection failed."); }
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f5f0', fontFamily: 'Segoe UI, sans-serif' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f7fa', fontFamily: 'Segoe UI, sans-serif' }}>
       {/* SIDEBAR */}
       <div style={sidebarStyle}>
         <div style={logoBox}>F FORGE</div>
@@ -242,19 +281,18 @@ const lastStatItem = {
         <div style={{ ...sbItem, backgroundColor: activeTab === 'working_programs' ? '#2563EB' : 'transparent', color: '#fff' }} onClick={() => { setActiveTab('working_programs'); setShowProjectForm(false); }}>Working Programs</div>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', marginLeft: '220px' }}>
         {/* HEADER */}
         <div style={headerStyle}>
-          <span style={{ fontWeight: 700 }}>Project Manager Dashboard</span>
+          <span style={{ fontWeight: 700, color: '#1B3A6B' }}>Project Manager Dashboard</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
-            <button onClick={onLogout} style={logoutBtnStyle}>LOGOUT</button>
             <div style={userCircleStyle}>{username?.charAt(0).toUpperCase() || 'U'}</div>
+            <button onClick={onLogout} style={logoutBtnStyle}>LOGOUT</button>
           </div>
         </div>
 
         <div style={{ padding: '25px', overflowY: 'auto' }}>
-          {!showProjectForm ? (
             <>
               {activeTab === 'execution' && (
                 <>
@@ -271,18 +309,23 @@ const lastStatItem = {
                               <td style={tdStyle}><span onClick={() => toggleRow(project.id)} style={{ cursor: 'pointer', color: '#2563EB', textDecoration: 'underline' }}><b>{project.name}</b> {expandedProjectId === project.id ? '▴' : '▾'}</span></td>
                              <td style={tdStyle}>
   <span style={{
-    padding: '4px 8px',
-    borderRadius: '12px',
+    padding: '6px 14px',
+    borderRadius: '20px',
     fontSize: '11px',
-    backgroundColor: (project.status === 'Active' || project.status === 'Approved') ? '#dcfce7' : '#fef3c7',
-    color: (project.status === 'Active' || project.status === 'Approved') ? '#166534' : '#92400e'
+    fontWeight: '700',
+    backgroundColor: (project.status === 'Active' || project.status === 'Approved' || project.status === 'In Progress') ? '#dcfce7' : '#fef3c7',
+    color: (project.status === 'Active' || project.status === 'Approved' || project.status === 'In Progress') ? '#15803d' : '#92400e',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px'
   }}>
-    {project.status}
+    {project.status === 'In Progress' ? <><span className="pulse-dot"></span> IN PROGRESS</> : project.status.toUpperCase()}
   </span>
 </td>
                               <td style={tdStyle}>
-  {/* Active or Approved,  */}
-  {(project.status === 'Active' || project.status === 'Approved') ? (
+  {/* Active or Approved or In Progress */}
+  {(project.status === 'Active' || project.status === 'Approved' || project.status === 'In Progress') ? (
     <button
       onClick={() => {
         setActiveProjectForTask(project);
@@ -401,7 +444,7 @@ const lastStatItem = {
                           <tr key={pgm.id} style={trStyle}>
                             <td style={tdStyle}><b>{pgm.name}</b></td>
                             <td style={tdStyle}>{pgm.start_date} to {pgm.end_date}</td>
-                            <td style={tdStyle}>{pgm.assigned_by_pgm || 'Directly Assigned'}</td>
+                            <td style={tdStyle}>{pgm.manager_name || 'System Assigned'}</td>
                            <td style={tdStyle}>
     <button
         onClick={() => handleBuildPlan(pgm)}
@@ -416,7 +459,8 @@ const lastStatItem = {
         {/* ... */}
         {pgm.status_label === 'Build Plan' ? '+ Build Plan' :
          pgm.status_label === 'Waiting' ? '🕒 Waiting' :
-         pgm.status_label === 'Approved' ? '✅ Approved' :
+         pgm.status_label === 'Approved' ? '▶ Start Working' :
+         pgm.status_label === 'In Progress' ? '🚀 In Progress' :
          pgm.status_label === 'Rejected' ? '❌ Rejected (Re-build)' : pgm.status_label}
     </button>
 </td>
@@ -440,7 +484,25 @@ const lastStatItem = {
                           <tr key={pgm.id} style={trStyle}>
                             <td style={tdStyle}><b>{pgm.name}</b><div style={{ fontSize: '11px', color: '#64748b' }}>{pgm.start_date} to {pgm.end_date}</div></td>
                             <td style={tdStyle}>{pgm.pm_name}</td>
-                            <td style={tdStyle}><span style={{ backgroundColor: '#DCFCE7', color: '#166534', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>IN PROGRESS</span></td>
+                            <td style={tdStyle}>
+                              {(() => {
+                                const pct = pgm.completion_percentage || 0;
+                                let label = "IN PROGRESS";
+                                let color = "#1e40af";
+                                let bg = "#dbeafe";
+
+                                if (pct === 0) { label = "NOT STARTED"; color = "#64748b"; bg = "#f1f5f9"; }
+                                else if (pct === 100) { label = "COMPLETED"; color = "#166534"; bg = "#dcfce7"; }
+                                else if (pct > 90) { label = "ALMOST DONE"; color = "#854d0e"; bg = "#fef9c3"; }
+                                else { label = `${pct}% COMPLETE`; }
+
+                                return (
+                                  <span style={{ backgroundColor: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
+                                    {label}
+                                  </span>
+                                );
+                              })()}
+                            </td>
                             <td style={tdStyle}><button onClick={() => handleLiveTrack(pgm.id)} style={{ ...primBtn, padding: '6px 12px', fontSize: '12px', backgroundColor: '#8b5cf6' }}>Live Track 📊</button></td>
                           </tr>
                         )) : (<tr><td colSpan="4" style={{ textAlign: 'center', padding: '20px' }}>No programs in execution.</td></tr>)}
@@ -450,256 +512,340 @@ const lastStatItem = {
                 </>
               )}
             </>
-          ) : (
-            <div style={formContainerStyle}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                <h2 style={{ margin: 0, color: '#1B3A6B' }}>Setup Project: {selectedProgram?.name}</h2>
-                <button onClick={() => setShowProjectForm(false)} style={secBtn}>Cancel / Back</button>
-              </div>
-              <form onSubmit={handleSubmitPlan}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={lbl}>Project Name</label>
-                    <input style={inp} required value={projectData.name} onChange={(e) => handleInputChange('name', e.target.value)} />
-                  </div>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={lbl}>Description</label>
-                    <textarea style={{ ...inp, minHeight: '80px' }} value={projectData.description} onChange={(e) => handleInputChange('description', e.target.value)} />
-                  </div>
-                  <div><label style={lbl}>Start Date</label><input type="date" style={inp} required value={projectData.start_date} onChange={(e) => handleInputChange('start_date', e.target.value)} /></div>
-                  <div><label style={lbl}>End Date</label><input type="date" style={inp} required value={projectData.end_date} onChange={(e) => handleInputChange('end_date', e.target.value)} /></div>
+      {/* REDESIGNED PROJECT SETUP (BUILD PLAN) MODAL */}
+      {showProjectForm && (
+        <div style={modalOverlayStyle}>
+          <div style={{ ...modalContentStyle, width: '800px', padding: '0', borderRadius: '16px', overflow: 'hidden', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+            {/* Header */}
+            <div style={{ background: '#1B3A6B', padding: '20px 30px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>🛠️ Setup Project: {selectedProgram?.name}</h3>
+              <button onClick={() => setShowProjectForm(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' }}>✕</button>
+            </div>
+            
+            <form onSubmit={handleSubmitPlan} style={{ padding: '30px', maxHeight: '80vh', overflowY: 'auto' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}>📄 Project Name</label>
+                  <input style={{...inp, padding: '12px', borderRadius: '8px'}} required value={projectData.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="e.g., Marketing Campaign Q3" />
                 </div>
-                <h4 style={{ color: '#1B3A6B' }}>👥 Resource Allocation</h4>
-                <table style={{ width: '100%' }}>
-                  <thead><tr><th style={miniTh}>Team Member</th><th style={miniTh}>Role</th><th style={miniTh}>FTE</th><th></th></tr></thead>
-                  <tbody>
-                    {projectData.team.map((m, idx) => (
-                      <tr key={idx}>
-                        <td><select style={inp} value={m.userId} onChange={(e) => handleMemberChange(idx, 'userId', e.target.value)}><option value="">Select Member</option>{employees.map(emp => <option key={emp.id} value={emp.id}>{emp.username}</option>)}</select></td>
-                        <td><input style={inp} value={m.role} onChange={(e) => handleMemberChange(idx, 'role', e.target.value)} /></td>
-                        <td><input type="number" step="0.1" style={inp} value={m.fte} onChange={(e) => handleMemberChange(idx, 'fte', e.target.value)} /></td>
-                        <td><button type="button" onClick={() => removeMemberRow(idx)} style={{ color: 'red', border: 'none', background: 'none' }}>✖</button></td>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}>📝 Description</label>
+                  <textarea style={{ ...inp, minHeight: '80px', padding: '12px', borderRadius: '8px', resize: 'none' }} value={projectData.description} onChange={(e) => handleInputChange('description', e.target.value)} placeholder="Briefly describe the project objectives..." />
+                </div>
+                <div>
+                    <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}>📅 Start Date</label>
+                    <input type="date" style={{...inp, padding: '12px', borderRadius: '8px'}} required 
+                        min={selectedProgram?.start_date} max={selectedProgram?.end_date}
+                        value={projectData.start_date} onChange={(e) => handleInputChange('start_date', e.target.value)} 
+                    />
+                    <small style={{color: '#64748b', fontSize: '10px'}}>Program Start: {selectedProgram?.start_date}</small>
+                </div>
+                <div>
+                    <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}>🏁 End Date</label>
+                    <input type="date" style={{...inp, padding: '12px', borderRadius: '8px'}} required 
+                        min={selectedProgram?.start_date} max={selectedProgram?.end_date}
+                        value={projectData.end_date} onChange={(e) => handleInputChange('end_date', e.target.value)} 
+                    />
+                    <small style={{color: '#64748b', fontSize: '10px'}}>Program End: {selectedProgram?.end_date}</small>
+                </div>
+              </div>
+
+              {/* Resource Allocation Section */}
+              <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' }}>
+                <h4 style={{ color: '#1B3A6B', marginTop: 0, fontSize: '15px', marginBottom: '15px' }}>👥 Resource Allocation</h4>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={{...miniTh, padding: '10px', textAlign: 'left'}}>Member</th>
+                        <th style={{...miniTh, padding: '10px', textAlign: 'left'}}>Role</th>
+                        <th style={{...miniTh, padding: '10px', textAlign: 'left'}}>FTE</th>
+                        <th style={{width: '40px'}}></th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <button type="button" onClick={addMemberRow} style={secBtn}>+ Add Member</button>
-                <h4 style={{ color: '#1B3A6B', marginTop: '20px' }}>📅 Sprints</h4>
+                    </thead>
+                    <tbody>
+                      {projectData.team.map((m, idx) => (
+                        <tr key={idx}>
+                          <td style={{padding: '5px'}}>
+                            <select style={{...inp, margin: 0, padding: '8px'}} value={m.userId} onChange={(e) => handleMemberChange(idx, 'userId', e.target.value)}>
+                              <option value="">Select Member</option>
+                              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.username}</option>)}
+                            </select>
+                          </td>
+                          <td style={{padding: '5px'}}><input style={{...inp, margin: 0, padding: '8px'}} value={m.role} onChange={(e) => handleMemberChange(idx, 'role', e.target.value)} placeholder="e.g. Lead" /></td>
+                          <td style={{padding: '5px'}}><input type="number" step="0.1" style={{...inp, margin: 0, padding: '8px'}} value={m.fte} onChange={(e) => handleMemberChange(idx, 'fte', e.target.value)} /></td>
+                          <td style={{padding: '5px', textAlign: 'center'}}><button type="button" onClick={() => removeMemberRow(idx)} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', fontSize: '16px' }}>✕</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <button type="button" onClick={addMemberRow} style={{ ...secBtn, marginTop: '12px', background: '#fff', border: '1px solid #cbd5e1', padding: '8px 16px', fontSize: '12px' }}>+ Add Team Member</button>
+              </div>
+
+              {/* Sprints Section */}
+              <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' }}>
+                <h4 style={{ color: '#1B3A6B', marginTop: 0, fontSize: '15px', marginBottom: '15px' }}>📅 Sprints</h4>
                 {projectData.sprints.map((s, idx) => (
-                  <div key={idx} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                    <input style={inp} value={s.name} onChange={(e) => handleSprintChange(idx, 'name', e.target.value)} />
-                    <input type="date" style={inp} value={s.start_date} onChange={(e) => handleSprintChange(idx, 'start_date', e.target.value)} />
-                    <input type="date" style={inp} value={s.end_date} onChange={(e) => handleSprintChange(idx, 'end_date', e.target.value)} />
+                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 40px', gap: '10px', marginBottom: '12px', alignItems: 'center' }}>
+                    <input style={{...inp, margin: 0, padding: '8px'}} value={s.name} onChange={(e) => handleSprintChange(idx, 'name', e.target.value)} placeholder="Sprint Name" />
+                    <input type="date" style={{...inp, margin: 0, padding: '8px'}} 
+                        min={projectData.start_date} max={projectData.end_date}
+                        value={s.start_date} onChange={(e) => handleSprintChange(idx, 'start_date', e.target.value)} 
+                    />
+                    <input type="date" style={{...inp, margin: 0, padding: '8px'}} 
+                        min={projectData.start_date} max={projectData.end_date}
+                        value={s.end_date} onChange={(e) => handleSprintChange(idx, 'end_date', e.target.value)} 
+                    />
+                    <button type="button" onClick={() => removeSprintRow(idx)} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', fontSize: '16px' }}>✕</button>
                   </div>
                 ))}
-                <button type="button" onClick={addSprintRow} style={secBtn}>+ Add Sprint</button>
-                <div style={{ marginTop: '30px', textAlign: 'right' }}><button type="submit" style={primBtn}>Submit Project Plan</button></div>
-              </form>
-            </div>
-          )}
+                <button type="button" onClick={addSprintRow} style={{ ...secBtn, marginTop: '12px', background: '#fff', border: '1px solid #cbd5e1', padding: '8px 16px', fontSize: '12px' }}>+ Add Sprint</button>
+              </div>
+
+              {/* Submit Actions */}
+              <div style={{ borderTop: '1px solid #f1f5f9', display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px', paddingTop: '20px' }}>
+                <button type="button" onClick={() => setShowProjectForm(false)} style={{ ...secBtn, padding: '10px 20px', fontWeight: '600', borderRadius: '8px' }}>Cancel</button>
+                <button type="submit" style={{ ...primBtn, padding: '10px 30px', background: '#10B981', fontWeight: '600', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2)' }}>Submit Project Plan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
         </div>
       </div>
 
-      {/* --- LIVE TRACKER MODAL (UPDATED TO MATCH IMAGE_B5EB1E.PNG) --- */}
+      {/* LIVE TRACKER MODAL - MATCHING PGM DESIGN */}
       {showTrackerModal && selectedProgramStats && (
         <div style={modalOverlayStyle}>
-          <div style={{ ...modalContentStyle, width: '1000px', maxWidth: '95%', maxHeight: '90vh', overflowY: 'auto', borderRadius: '20px' }}>
-
-            {/* Header with Activity Details */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+          <div style={{ ...modalContentStyle, width: '900px', maxHeight: '90vh', overflowY: 'auto', background: '#fff' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px', marginBottom: '20px' }}>
               <div>
-                <h2 style={{ margin: 0, color: '#1B3A6B', fontSize: '24px' }}>Live Tracker: {selectedProgramStats.program_name}</h2>
-                <p style={{ margin: '5px 0 0 0', color: '#64748b', fontSize: '13px' }}>
-                  Tracking real-time execution for Manager: <span style={{ fontWeight: 'bold', color: '#1B3A6B' }}>{selectedProgramStats.pm_name || 'Not Assigned'}</span>
-                </p>
+                <h2 style={{ margin: 0, color: '#1B3A6B' }}>Live Tracker: {selectedProgramStats.program_name}</h2>
+                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Tracking real-time execution for Manager: <b>{selectedProgramStats.pm_name}</b></p>
               </div>
-              <button onClick={() => setShowTrackerModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button 
+                  onClick={handleDownloadReport} 
+                  style={{ ...secBtn, background: '#10b981', color: '#fff', border: 'none', padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  📥 Download Report
+                </button>
+                <button onClick={() => setShowTrackerModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+              </div>
             </div>
 
-            {/* Reordered Quick Stats Grid */}
+            {/* Real-time Summary Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '25px' }}>
-              <div style={liveStatCard('#3b82f6')}>
+              <div style={liveStatCard('#2563EB')}>
                 <div style={liveStatLabel}>OVERALL COMPLETION</div>
-                <div style={liveStatValue}>{selectedProgramStats.completion_percentage || 0}%</div>
+                <div style={liveStatValue}>{selectedProgramStats.overall_progress}%</div>
               </div>
-              <div style={liveStatCard('#10b981')}>
+              <div style={liveStatCard('#10B981')}>
                 <div style={liveStatLabel}>TOTAL TASKS</div>
-                <div style={liveStatValue}>{selectedProgramStats.total_tasks || 0}</div>
+                <div style={liveStatValue}>{selectedProgramStats.total_tasks}</div>
               </div>
               <div style={liveStatCard('#f59e0b')}>
                 <div style={liveStatLabel}>COMPLETED</div>
-                <div style={liveStatValue}>{selectedProgramStats.completed_tasks || 0}</div>
+                <div style={liveStatValue}>{selectedProgramStats.completed_tasks}</div>
               </div>
-              <div style={liveStatCard('#8b5cf6')}>
+              <div style={liveStatCard('#6366f1')}>
                 <div style={liveStatLabel}>TEAM MEMBERS</div>
-                <div style={liveStatValue}>{selectedProgramStats.team_count || 1}</div>
+                <div style={liveStatValue}>{selectedProgramStats.team_count}</div>
               </div>
             </div>
 
-            {/* Charts Row: Velocity and Distribution */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '20px', marginBottom: '20px' }}>
-              {/* Sprint Progress Velocity (Left) */}
+            {/* Data Visualization Charts */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '20px' }}>
               <div style={chartContainer}>
-                <h4 style={{ marginTop: 0, fontSize: '15px', color: '#1B3A6B' }}>Sprint Progress Velocity</h4>
-               <div style={{ height: '280px', width: '100%', display: 'block' }}>
-                 <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                    <LineChart data={selectedProgramStats.velocity_data || []}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                      <XAxis dataKey="name" tick={{fontSize: 11}} />
-                      <YAxis domain={[0, 100]} tick={{fontSize: 11}} />
-                      <Tooltip />
-                      <Line
-                        type="monotone"
-                        dataKey="completion"
-                        stroke="#2563EB"
-                        strokeWidth={3}
-                        dot={{ r: 6, fill: '#fff', strokeWidth: 2, stroke: '#2563EB' }}
-                        activeDot={{ r: 8 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+                <h4 style={chartHeader}>Sprint Progress Velocity</h4>
+                <ResponsiveContainer width="100%" height={250}>
+                  <LineChart data={selectedProgramStats.velocity_data}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="completion" stroke="#2563EB" strokeWidth={3} dot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
-
-              {/* Task Distribution (Right) */}
               <div style={chartContainer}>
-                <h4 style={{ marginTop: 0, fontSize: '15px', color: '#1B3A6B' }}>Task Distribution</h4>
-               <div style={{ height: '280px', width: '100%', display: 'block' }}>
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Done', value: selectedProgramStats.completed_tasks || 0 },
-                          { name: 'Doing', value: selectedProgramStats.pending_tasks || 0 },
-                          { name: 'Todo', value: Math.max(0, (selectedProgramStats.total_tasks || 0) - (selectedProgramStats.completed_tasks || 0) - (selectedProgramStats.pending_tasks || 0)) }
-                        ]}
-                        innerRadius={65}
-                        outerRadius={85}
-                        paddingAngle={8}
-                        dataKey="value"
-                      >
-                        <Cell fill="#10b981" />
-                        <Cell fill="#3b82f6" />
-                        <Cell fill="#ef4444" />
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '12px', color: '#64748b', marginTop: '10px' }}>
-                    <span><span style={{color:'#10b981', marginRight: '4px'}}>●</span>Done</span>
-                    <span><span style={{color:'#3b82f6', marginRight: '4px'}}>●</span>Doing</span>
-                    <span><span style={{color:'#ef4444', marginRight: '4px'}}>●</span>Todo</span>
+                <h4 style={chartHeader}>Task Distribution</h4>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie
+                      data={selectedProgramStats.task_distribution || []}
+                      innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value"
+                    >
+                      <Cell fill="#10B981" /> {/* Done */}
+                      <Cell fill="#f59e0b" /> {/* Doing */}
+                      <Cell fill="#ef4444" /> {/* Todo */}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={legendContainer}>
+                  <span><i style={{ display: 'inline-block', width: '10px', height: '10px', background: '#10B981', marginRight: '5px', borderRadius: '50%' }}></i> Done</span>
+                  <span><i style={{ display: 'inline-block', width: '10px', height: '10px', background: '#f59e0b', marginRight: '5px', borderRadius: '50%' }}></i> Doing</span>
+                  <span><i style={{ display: 'inline-block', width: '10px', height: '10px', background: '#ef4444', marginRight: '5px', borderRadius: '50%' }}></i> Todo</span>
                 </div>
               </div>
             </div>
 
-            {/* Gantt Chart Section */}
-<div style={{ ...chartContainer, marginTop: '20px', padding: '20px', minHeight: '350px', backgroundColor: '#fff', borderRadius: '12px' }}>
-    <h4 style={{ marginTop: 0, marginBottom: '20px', fontSize: '15px', color: '#1B3A6B' }}>
-        Project Timeline (Gantt Chart)
-    </h4>
-    <div style={{ width: '100%', overflowX: 'auto' }}>
-        <Chart
-            chartType="Gantt"
-            width="100%"
-            height="300px"
-           data={[
-    [
-        { type: "string", label: "Task ID" },
-        { type: "string", label: "Task Name" },
-        { type: "date", label: "Start Date" },
-        { type: "date", label: "End Date" },
-        { type: "number", label: "Duration" },
-        { type: "number", label: "Percent Complete" },
-        { type: "string", label: "Dependencies" },
-    ],
-    // selectedProgramStats.gantt_data
-    ...(selectedProgramStats?.gantt_data || []).map((task) => [
-        String(task.id),
-        task.name || "Unnamed Task",
-        new Date(task.start), // Backend
-        new Date(task.end),   // Backend
-        null,
-        task.progress || 0,
-        null,
-    ]),
-]}
+            {/* Program Gran Tracker */}
+            <div style={{ width: '100%', marginTop: '25px', padding: '20px', background: '#fff', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
+              <h5 style={{ marginBottom: '15px', fontWeight: 'bold', color: '#1e293b' }}>📊 Program Gran Tracker</h5>
+              {selectedProgramStats?.gantt_data?.length > 0 ? (
+                <div style={{ width: '100%', overflowX: 'auto', background: '#fff' }}>
+                  <Gantt
+                    tasks={selectedProgramStats.gantt_data.map(t => ({
+                      id: String(t.id),
+                      name: t.name || "Task",
+                      start: new Date(t.start || new Date()),
+                      end: new Date(t.end || new Date(new Date().getTime() + 86400000)),
+                      progress: t.progress || 0,
+                      type: 'task',
+                      styles: { progressColor: '#1B3A6B', progressSelectedColor: '#2563EB' },
+                    }))}
+                    viewMode={ViewMode.Day}
+                    listCellWidth="150px"
+                    columnWidth={60}
+                  />
+                </div>
+              ) : (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
+                  <p>No timeline data available for this program.</p>
+                </div>
+              )}
+            </div>
 
-            options={{
-                height: 280,
-                gantt: {
-                    trackHeight: 40,
-                    barHeight: 25,
-                    labelStyle: { fontName: 'Segoe UI', fontSize: 12 },
-                    palette: [{ "color": "#2563EB", "dark": "#1e40af", "light": "#60a5fa" }]
-                },
-            }}
-        />
-    </div>
-</div>
-
-            {/* Recent Team Activity Log (Bottom) */}
-            <div style={{ ...chartContainer, marginBottom: '0' }}>
-              <h4 style={{ marginTop: 0, fontSize: '15px', color: '#1B3A6B', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>Recent Team Activity Log</h4>
-              <div style={{ marginTop: '10px' }}>
-                {(selectedProgramStats?.recent_logs || []).length > 0 ? (
-                    selectedProgramStats.recent_logs.map((act, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: idx !== (selectedProgramStats?.recent_logs?.length - 1) ? '1px solid #f8fafc' : 'none' }}>
-                        <div>
-                        <div style={{ fontSize: '14px' }}><b style={{ color: '#2563EB' }}>{act.user}</b> in <span style={{ fontWeight: '600' }}>{act.sprint}</span></div>
-                        <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>Task: {act.task_name}</div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '12px', color: '#ef4444', fontWeight: 'bold' }}>Due: {act.due_date}</div>
-                        <div style={{ marginTop: '5px' }}>
-                            <span style={{
-                                fontSize: '10px',
-                                padding: '3px 10px',
-                                borderRadius: '10px',
-                                background: act.status === 'Done' ? '#DCFCE7' : '#f1f5f9',
-                                color: act.status === 'Done' ? '#166534' : '#64748b',
-                                fontWeight: 'bold'
-                            }}>
-                            {act.status}
-                            </span>
-                        </div>
-                        </div>
+            {/* Recent Activity Log */}
+            <div style={{ marginTop: '25px', padding: '15px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+              <h4 style={{ marginTop: 0, fontSize: '13px', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>Recent Team Activity Log</h4>
+              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                {selectedProgramStats.recent_logs && selectedProgramStats.recent_logs.length > 0 ? (
+                  selectedProgramStats.recent_logs.map((log, i) => (
+                    <div key={i} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ fontSize: '12px' }}>
+                        <strong style={{ color: '#2563EB' }}>{log.user}</strong>
+                        <span style={{ color: '#64748b' }}> in </span>
+                        <strong style={{ color: '#1e293b' }}>{log.sprint || 'N/A'}</strong>
+                        <div style={{ marginTop: '4px', color: '#475569' }}><b>Task:</b> {log.task_name || 'Unnamed Task'}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#ef4444' }}>Due: {log.due_date || 'No Date'}</div>
+                        <div style={{ fontSize: '10px', marginTop: '4px', background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: '10px', display: 'inline-block' }}>{log.status || 'In Progress'}</div>
+                      </div>
                     </div>
-                ))
+                  ))
                 ) : (
-                    <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px' }}>No recent activity to display.</div>
+                  <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', color: '#94a3b8' }}>No activity logs available for this program.</div>
                 )}
               </div>
             </div>
-
           </div>
         </div>
       )}
 
-      {/* CREATE TASK MODAL */}
+      {/* CREATE TASK MODAL - Redesigned for premium look */}
       {showTaskModal && (
         <div style={modalOverlayStyle}>
-          <div style={modalContentStyle}>
-            <h3 style={{ marginTop: 0, color: '#1B3A6B' }}>Create Task: {activeProjectForTask?.name}</h3>
-            <form onSubmit={handleCreateTask}>
-              <label style={lbl}>Task Title</label>
-              <input style={inp} required placeholder="e.g. Research, Design..." value={taskData.title} onChange={(e) => setTaskData({...taskData, title: e.target.value})} />
-              <label style={lbl}>Assign To</label>
-              <select style={inp} required value={taskData.assigned_to} onChange={(e) => setTaskData({...taskData, assigned_to: e.target.value})}>
-                <option value="">Select Member</option>
-                {activeProjectForTask?.team_members?.map(m => ( <option key={m.username} value={m.username}>{m.username}</option> ))}
-              </select>
-              <label style={lbl}>Sprint</label>
-              <select style={inp} required value={taskData.sprint_id} onChange={(e) => setTaskData({...taskData, sprint_id: e.target.value})}>
-                <option value="">Select Sprint</option>
-                {activeProjectForTask?.sprints?.map(s => ( <option key={s.id} value={s.id}>{s.name}</option> ))}
-              </select>
-              <label style={lbl}>Due Date</label>
-              <input type="date" style={inp} required value={taskData.due_date} onChange={(e) => setTaskData({...taskData, due_date: e.target.value})} />
-              <div style={{ marginTop: '25px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                <button type="submit" style={primBtn}>Save Task</button>
-                <button type="button" onClick={() => setShowTaskModal(false)} style={secBtn}>Cancel</button>
+          <div style={{ ...modalContentStyle, width: '550px', padding: '0', borderRadius: '16px', overflow: 'hidden', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+            {/* Modal Header */}
+            <div style={{ background: '#1B3A6B', padding: '20px 30px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>🚀 Create New Task</h3>
+              <button onClick={() => setShowTaskModal(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', opacity: 0.8 }}>✕</button>
+            </div>
+            
+            <form onSubmit={handleCreateTask} style={{ padding: '30px' }}>
+              {/* Task Title */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}>📝 Task Title</label>
+                <input 
+                  style={{ ...inp, padding: '12px', fontSize: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }} 
+                  required 
+                  placeholder="What needs to be done?" 
+                  value={taskData.title} 
+                  onChange={(e) => setTaskData({...taskData, title: e.target.value})} 
+                />
+              </div>
+
+              {/* Assignments & Sprint */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}>👤 Assign To</label>
+                  <select 
+                    style={{ ...inp, padding: '12px', fontSize: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }} 
+                    required 
+                    value={taskData.assigned_to} 
+                    onChange={(e) => setTaskData({...taskData, assigned_to: e.target.value})}
+                  >
+                    <option value="">Select Member</option>
+                    {activeProjectForTask?.team_members?.map(m => ( <option key={m.username} value={m.username}>{m.username}</option> ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}>📦 Sprint</label>
+                  <select 
+                    style={{ ...inp, padding: '12px', fontSize: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }} 
+                    required 
+                    value={taskData.sprint_id} 
+                    onChange={(e) => setTaskData({...taskData, sprint_id: e.target.value})}
+                  >
+                    <option value="">Select Sprint</option>
+                    {activeProjectForTask?.sprints?.map(s => ( <option key={s.id} value={s.id}>{s.name}</option> ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Priority & Due Date */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}>🚩 Priority</label>
+                  <select 
+                    style={{ ...inp, padding: '12px', fontSize: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }} 
+                    value={taskData.priority} 
+                    onChange={(e) => setTaskData({...taskData, priority: e.target.value})}
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}>📅 Due Date</label>
+                  <input 
+                    type="date" 
+                    style={{ ...inp, padding: '12px', fontSize: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }} 
+                    required 
+                    min={activeProjectForTask?.sprints?.find(s => String(s.id) === String(taskData.sprint_id))?.start_date}
+                    max={activeProjectForTask?.sprints?.find(s => String(s.id) === String(taskData.sprint_id))?.end_date}
+                    value={taskData.due_date} 
+                    onChange={(e) => setTaskData({...taskData, due_date: e.target.value})} 
+                  />
+                  {taskData.sprint_id && (
+                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                      Sprint: {activeProjectForTask?.sprints?.find(s => String(s.id) === String(taskData.sprint_id))?.start_date} to {activeProjectForTask?.sprints?.find(s => String(s.id) === String(taskData.sprint_id))?.end_date}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div style={{ marginBottom: '25px' }}>
+                <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}>📄 Description</label>
+                <textarea 
+                  style={{ ...inp, height: '100px', resize: 'none', padding: '12px', fontSize: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }} 
+                  placeholder="Provide more details about this task..." 
+                  value={taskData.description} 
+                  onChange={(e) => setTaskData({...taskData, description: e.target.value})}
+                />
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
+                <button type="button" onClick={() => setShowTaskModal(false)} style={{ ...secBtn, padding: '10px 20px', borderRadius: '8px', fontWeight: '600' }}>Cancel</button>
+                <button type="submit" style={{ ...primBtn, padding: '10px 25px', borderRadius: '8px', background: '#10B981', fontWeight: '600', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2)' }}>Save Task</button>
               </div>
             </form>
           </div>
@@ -707,47 +853,80 @@ const lastStatItem = {
       )}
 
       <style>{`
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        
+        .fade-in { animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+        .pulse-dot { width: 8px; height: 8px; background: #10b981; borderRadius: 50%; animation: pulse 2s infinite; }
+        .hover-lift { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease; }
+        .hover-lift:hover { transform: translateY(-5px); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.1); }
+        .progress-shimmer { background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%); background-size: 200% 100%; animation: shimmer 2.5s infinite linear; }
+        .activity-card { transition: all 0.2s ease; border: 1px solid transparent; }
+        .activity-card:hover { border-color: #e0e7ff; background: #fff !important; transform: scale(1.01); }
       `}</style>
     </div>
   );
 };
 
-// --- STYLES ---
-const sidebarStyle = { width: '220px', backgroundColor: '#1B3A6B', color: '#fff', display: 'flex', flexDirection: 'column' };
-const logoBox = { padding: '25px 20px', fontSize: '22px', fontWeight: 'bold' };
-const sbSecTitle = { fontSize: '10px', color: '#8ab0d8', padding: '20px 20px 5px' };
-const sbItem = { padding: '12px 20px', fontSize: '13px', cursor: 'pointer' };
-const headerStyle = { height: '60px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 25px', borderBottom: '1px solid #e2e8f0' };
-const logoutBtnStyle = { background: '#EF4444', color: '#fff', border: 'none', padding: '5px 12px', borderRadius: '4px', cursor: 'pointer' };
-const userCircleStyle = { width: '32px', height: '32px', borderRadius: '50%', background: '#3B82F6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' };
-const sectionTitle = { color: '#1B3A6B' };
-const tableContainer = { background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' };
-const tableStyle = { width: '100%', borderCollapse: 'collapse' };
-const theadStyle = { background: '#f8fafc' };
-const thStyle = { padding: '15px', textAlign: 'left', fontSize: '12px', color: '#64748B' };
-const tdStyle = { padding: '15px', borderTop: '1px solid #f1f5f9' };
-const trStyle = { transition: '0.2s' };
-const primBtn = { background: '#2563EB', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
-const secBtn = { background: '#e2e8f0', color: '#475569', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' };
-const formContainerStyle = { background: '#fff', padding: '30px', borderRadius: '8px' };
-const inp = { width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #cbd5e1', marginTop: '5px' };
-const lbl = { fontSize: '12px', fontWeight: 'bold', display: 'block', marginTop: '10px' };
-const miniTh = { textAlign: 'left', fontSize: '11px', color: '#94a3b8' };
-const innerCardStyle = { background: '#fff', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' };
-const innerTitleStyle = { margin: '0 0 10px 0', color: '#1B3A6B' };
-const miniTableStyle = { width: '100%', borderCollapse: 'collapse', fontSize: '12px' };
-const miniTheadStyle = { borderBottom: '2px solid #f1f5f9', background: '#f8fafc' };
-const miniThStyle = { padding: '8px' };
-const miniTrStyle = { borderBottom: '1px solid #f1f5f9' };
-const miniTdStyle = { padding: '8px' };
-const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 };
-const modalContentStyle = { background: '#fff', padding: '30px', borderRadius: '12px' };
+// --- PREMIUM STYLES (MATCHING PGM DESIGN) ---
+const sidebarStyle = { width: '220px', backgroundColor: '#1B3A6B', color: '#fff', display: 'flex', flexDirection: 'column', position: 'fixed', height: '100vh', left: 0, top: 0, zIndex: 100 };
+const logoBox = { padding: '25px', color: '#fff', fontSize: '24px', fontWeight: 'bold', borderBottom: '1px solid #2a4f8a', marginBottom: '20px' };
+const sbSecTitle = { fontSize: '10px', color: '#8ab0d8', textTransform: 'uppercase', padding: '10px 20px 8px' };
+const sbItem = { padding: '12px 20px', color: '#ccdaee', cursor: 'pointer', fontSize: '13px', transition: '0.3s', display: 'flex', alignItems: 'center', gap: '10px' };
 
-const liveStatCard = (color) => ({ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0', borderTop: `4px solid ${color}`, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' });
-const liveStatLabel = { fontSize: '10px', fontWeight: '800', color: '#64748b', marginBottom: '5px', letterSpacing: '0.5px' };
+const headerStyle = { height: '65px', background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 25px', marginLeft: '220px', position: 'sticky', top: 0, zIndex: 90 };
+const logoutBtnStyle = { padding: '5px 10px', fontSize: '11px', cursor: 'pointer', background: '#EF4444', color: '#fff', border: 'none', borderRadius: '4px' };
+const userCircleStyle = { width: '35px', height: '35px', borderRadius: '50%', backgroundColor: '#2563EB', color: '#fff', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold' };
+
+const sectionTitle = { fontSize: '16px', fontWeight: '800', color: '#1B3A6B', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' };
+const tableContainer = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' };
+const tableStyle = { width: '100%', borderCollapse: 'collapse' };
+const theadStyle = { background: '#f8fafc', borderBottom: '1px solid #e2e8f0' };
+const thStyle = { padding: '15px', textAlign: 'left', color: '#64748B', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase' };
+const trStyle = { borderBottom: '1px solid #f1f5f9', transition: '0.2s' };
+const tdStyle = { padding: '15px', fontSize: '13px', color: '#475569' };
+
+const primBtn = { background: '#2563EB', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '13px' };
+const secBtn = { background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '8px 18px', borderRadius: '6px', cursor: 'pointer' };
+
+const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 };
+const modalContentStyle = { background: '#fff', padding: '30px', borderRadius: '15px', position: 'relative' };
+
+const liveStatCard = (color) => ({ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0', borderTop: `4px solid ${color}` });
+const liveStatLabel = { fontSize: '10px', fontWeight: '800', color: '#64748b', marginBottom: '5px' };
 const liveStatValue = { fontSize: '24px', fontWeight: '800', color: '#1B3A6B' };
 const chartContainer = { background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0' };
+const chartHeader = { margin: '0 0 15px 0', fontSize: '13px', color: '#1e293b' };
+const legendContainer = { display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '11px', marginTop: '10px' };
+
+const CustomTooltip = ({ active, payload }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{ background: '#fff', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+        <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>{payload[0].payload.name}</p>
+        <p style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#1B3A6B' }}>{payload[0].value}% Complete</p>
+      </div>
+    );
+  }
+  return null;
+};
+
+const LegendItem = ({ color, label }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: color }}></div>
+    <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748b' }}>{label}</span>
+  </div>
+);
+
+const innerCardStyle = { background: '#fff', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' };
+const innerTitleStyle = { margin: '0 0 10px 0', fontSize: '14px', fontWeight: '800', color: '#1B3A6B' };
+const miniTableStyle = { width: '100%', borderCollapse: 'collapse' };
+const miniTheadStyle = { borderBottom: '2px solid #f1f5f9' };
+const miniThStyle = { padding: '10px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase' };
+const miniTrStyle = { borderBottom: '1px solid #f1f5f9' };
+const miniTdStyle = { padding: '10px', fontSize: '13px', color: '#475569' };
+const lbl = { display: 'block', fontSize: '11px', fontWeight: '800', marginBottom: '6px', color: '#64748B' };
+const inp = { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px' };
 
 export default PMDashboard;

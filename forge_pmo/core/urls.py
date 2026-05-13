@@ -39,4 +39,5 @@ path('program-tracker/', get_program_tracker_stats, name='program-tracker'),
 path('get-working-programs/', views.get_working_programs, name='get_working_programs'),
 path('update-task-status-with-tracker/', views.update_task_status, name='update-task-status'),
 path('pm-dashboard-stats/', views.get_pm_dashboard_stats, name='pm-stats'),
+path('update-sprint-status/', views.update_sprint_status, name='update_sprint_status'),
 ]
