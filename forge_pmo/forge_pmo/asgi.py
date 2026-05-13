@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/6.0/howto/deployment/asgi/
 
 import os
 
+# pyrefly: ignore [untyped-import]
 from django.core.asgi import get_asgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'forge_pmo.settings')

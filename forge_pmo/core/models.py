@@ -1,7 +1,12 @@
+# pyrefly: ignore [untyped-import]
 from django.db import models
+# pyrefly: ignore [untyped-import]
 from django.contrib.auth.models import User
+# pyrefly: ignore [untyped-import]
 from django.db.models.signals import post_save
+# pyrefly: ignore [untyped-import]
 from django.dispatch import receiver
+# pyrefly: ignore [untyped-import]
 from django.db.models import Sum
 
 # --- USER PROFILE ---
@@ -29,6 +34,7 @@ class Program(models.Model):
     end_date = models.DateField(null=True, blank=True)
     document = models.FileField(upload_to='program_docs/', null=True, blank=True) # Serializer
 
+    # pyrefly: ignore [bad-override]
     def __str__(self):
         return self.name
 
@@ -43,6 +49,7 @@ class Project(models.Model):
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
 
+    # pyrefly: ignore [bad-override]
     def __str__(self):
         return self.name
 
@@ -89,10 +96,12 @@ class Task(models.Model):
 
     @property
     def remaining_hours(self):
+        # pyrefly: ignore [unsupported-operation]
         return max(0, self.total_estimated_hours - self.hours_logged)
 
     @property
     def total_consumed_hours(self):
+        # pyrefly: ignore [missing-attribute]
         return self.daily_logs.aggregate(total=Sum('hours_added'))['total'] or 0.0
 
 # Daily Effort Log (Same as yours)

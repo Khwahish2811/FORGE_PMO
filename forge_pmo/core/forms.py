@@ -1,4 +1,6 @@
+# pyrefly: ignore [untyped-import]
 from django import forms
+# pyrefly: ignore [missing-import]
 from core.models import Project
 
 class ProjectForm(forms.ModelForm):

@@ -1,8 +1,13 @@
+# pyrefly: ignore [untyped-import]
 from django.contrib import admin
+# pyrefly: ignore [untyped-import]
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+# pyrefly: ignore [missing-import]
 from core import views
+# pyrefly: ignore [untyped-import]
 from django.conf import settings
+# pyrefly: ignore [untyped-import]
 from django.conf.urls.static import static
 
 router = DefaultRouter()

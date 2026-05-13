@@ -1,23 +1,34 @@
 import json
 import logging
+# pyrefly: ignore [untyped-import]
 from django.contrib.auth import authenticate
+# pyrefly: ignore [untyped-import]
 from django.contrib.auth.models import User
+# pyrefly: ignore [untyped-import]
 from django.views.decorators.csrf import csrf_exempt
+# pyrefly: ignore [untyped-import]
 from django.db import transaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from .models import Program, Project, Task, Sprint, TeamMember, DailyEffortLog
 from .serializers import ProjectSerializer, ProgramSerializer, TaskSerializer
+# pyrefly: ignore [untyped-import]
 from django.http import JsonResponse
+# pyrefly: ignore [untyped-import]
 from django.db.models import Sum, Count, Q, Avg
+# pyrefly: ignore [untyped-import]
 from django.utils import timezone
 from datetime import timedelta, datetime
+# pyrefly: ignore [untyped-import]
 from django.shortcuts import get_object_or_404
 from datetime import date # Red line 1 fix
+# pyrefly: ignore [untyped-import]
 from django.db import models, transaction
   # Apne models ke hisaab se check karein
+# pyrefly: ignore [untyped-import]
 from django.db.models import Count, Q
+# pyrefly: ignore [untyped-import]
 from django.db.models import Avg
 
 
@@ -54,6 +65,7 @@ def login_api(request):
 @api_view(['GET'])
 def get_all_programs(request):
     try:
+        # pyrefly: ignore [missing-attribute]
         programs = Program.objects.all().order_by('-id')
         serializer = ProgramSerializer(programs, many=True)
         return Response(serializer.data, status=200)
@@ -66,6 +78,7 @@ def get_all_programs(request):
 def create_program(request):
     try:
         data = request.data
+        # pyrefly: ignore [missing-attribute]
         program = Program.objects.create(
             name=data.get('name'),
             description=data.get('description'),
@@ -83,10 +96,12 @@ def update_program_status(request):
     pgm_id = request.data.get('id')
     new_status = request.data.get('status')
     try:
+        # pyrefly: ignore [missing-attribute]
         program = Program.objects.get(id=pgm_id)
         program.status = new_status
         program.save()
         return Response({'success': True})
+    # pyrefly: ignore [missing-attribute]
     except Program.DoesNotExist:
         return Response({'success': False, 'message': 'Program not found'}, status=404)
 
@@ -97,6 +112,7 @@ def assign_project_manager(request):
     pm_id = request.data.get('pm_id')
     pgm_name_from_react = request.data.get('manager_name')
     try:
+        # pyrefly: ignore [missing-attribute]
         program = Program.objects.get(id=program_id)
         pm_user = User.objects.get(id=pm_id)
         program.project_manager_assigned = pm_user
@@ -115,9 +131,11 @@ def my_assigned_programs(request):
 
     # 1. Fetch programs assigned to the user with specific statuses
 
+    # pyrefly: ignore [missing-attribute]
     programs = Program.objects.filter(
         project_manager_assigned__username=username
     ).filter(
+        # pyrefly: ignore [unsupported-operation]
         Q(status__iexact='Approved') |
         Q(status__iexact='Active') |
         Q(status__iexact='In Progress')
@@ -126,6 +144,7 @@ def my_assigned_programs(request):
     data = []
     for p in programs:
         # 2. Check if a project exists for this program
+        # pyrefly: ignore [missing-attribute]
         project = Project.objects.filter(program_id=p.id).first()
 
         status_label = project.status if project else "Build Plan"
@@ -150,6 +169,7 @@ def get_active_projects(request):
     if not username:
         return Response([], status=200)
     try:
+        # pyrefly: ignore [missing-attribute]
         projects = Project.objects.filter(created_by__username=username).select_related('program')
         serializer = ProjectSerializer(projects, many=True)
         return Response(serializer.data, status=200)
@@ -183,10 +203,13 @@ def get_team_members(request):
 def create_project_plan(request):
     data = request.data
     try:
+        # pyrefly: ignore [bad-context-manager]
         with transaction.atomic():
+            # pyrefly: ignore [missing-attribute]
             program = Program.objects.get(id=data.get('program_id'))
             pm_user = User.objects.get(username=data.get('pm_username'))
 
+            # pyrefly: ignore [missing-attribute]
             project = Project.objects.create(
                 program=program,
                 name=data.get('name'),
@@ -200,6 +223,7 @@ def create_project_plan(request):
 
             sprints_data = data.get('sprints', [])
             for idx, s_data in enumerate(sprints_data, start=1):
+                # pyrefly: ignore [missing-attribute]
                 Sprint.objects.create(
                     project=project,
                     name=s_data.get('name', f"Sprint {idx}"),
@@ -211,6 +235,7 @@ def create_project_plan(request):
             team_data = data.get('team', [])
             for member in team_data:
                 user_obj = User.objects.get(id=member.get('userId'))
+                # pyrefly: ignore [missing-attribute]
                 TeamMember.objects.create(
                     project=project,
                     user=user_obj,
@@ -228,9 +253,11 @@ def create_project_plan(request):
 @api_view(['GET'])
 def get_pending_projects(request):
     try:
+        # pyrefly: ignore [missing-attribute]
         projects = Project.objects.filter(status='Pending').select_related('program', 'created_by').order_by('-id')
         data = []
         for p in projects:
+            # pyrefly: ignore [missing-attribute]
             team_members = TeamMember.objects.filter(project=p)
             team_list = [{
                 "username": t.user.username if t.user else "Unknown",
@@ -238,6 +265,7 @@ def get_pending_projects(request):
                 "fte": t.fte_score
             } for t in team_members]
 
+            # pyrefly: ignore [missing-attribute]
             sprints = Sprint.objects.filter(project=p)
             sprint_list = [{
                 "name": s.name,
@@ -268,6 +296,7 @@ def approve_project_plan(request):
     decision = request.data.get('decision')  # 'approve' or 'reject'
 
     try:
+        # pyrefly: ignore [missing-attribute]
         project = Project.objects.get(id=project_id)
 
         # Syncing with PM Dashboard labels
@@ -278,6 +307,7 @@ def approve_project_plan(request):
 
         project.save()
         return Response({"success": True, "message": f"Project is now {project.status}"})
+    # pyrefly: ignore [missing-attribute]
     except Project.DoesNotExist:
         return Response({"error": "Project not found"}, status=404)
 
@@ -287,6 +317,7 @@ def get_tm_projects(request):
     username = request.GET.get('username')
     if not username: return JsonResponse([], safe=False)
     try:
+        # pyrefly: ignore [missing-attribute]
         my_assignments = TeamMember.objects.filter(user__username=username).select_related('project')
         assigned_projects = []
         for assign in my_assignments:
@@ -304,6 +335,7 @@ def get_tm_projects(request):
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
+    # pyrefly: ignore [missing-attribute]
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
 
@@ -314,10 +346,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
 def create_task(request):
     data = request.data
     try:
+        # pyrefly: ignore [missing-attribute]
         project = Project.objects.get(id=int(data.get('project_id')))
+        # pyrefly: ignore [missing-attribute]
         sprint = Sprint.objects.get(id=int(data.get('sprint_id')))
         assignee = User.objects.get(username=data.get('assigned_to'))
 
+        # pyrefly: ignore [missing-attribute]
         task = Task.objects.create(
             project=project,
             sprint=sprint,
@@ -338,6 +373,7 @@ def create_task(request):
 def get_kanban_tasks(request):
     username = request.query_params.get('username')
     try:
+        # pyrefly: ignore [missing-attribute]
         tasks = Task.objects.filter(assigned_to__username=username)
         task_data = []
         for t in tasks:
@@ -351,6 +387,7 @@ def get_kanban_tasks(request):
                 "task_title": t.title or "Untitled",
                 "status": t.status or "To Do",
                 "project_name": proj.name if proj else "No Project",
+                # pyrefly: ignore [missing-attribute]
                 "program_name": prog.name if proj else "Standard",
                 "project_manager": pm.username if pm else "Not Assigned",
                 "sprint_name": spr.name if spr else "Unassigned",
@@ -369,10 +406,12 @@ def update_task_status(request):
     try:
         task_id = request.data.get('task_id')
         new_status = request.data.get('status')
+        # pyrefly: ignore [missing-attribute]
         task = Task.objects.get(id=task_id)
         task.status = new_status
         task.save()
         return Response({"message": "Status updated successfully!"}, status=200)
+    # pyrefly: ignore [missing-attribute]
     except Task.DoesNotExist:
         return Response({"error": "Task not found"}, status=404)
 @api_view(['POST'])
@@ -387,11 +426,14 @@ def log_daily_effort(request):
         return Response({"success": False, "message": "Hours must be greater than 0"}, status=400)
 
     try:
+        # pyrefly: ignore [bad-context-manager]
         with transaction.atomic():
             # select_for_update()
+            # pyrefly: ignore [missing-attribute]
             task = Task.objects.select_for_update().get(id=task_id)
             user = User.objects.get(username=username)
 
+            # pyrefly: ignore [missing-attribute]
             total_today = DailyEffortLog.objects.filter(
                 user=user,
                 log_date=log_date
@@ -407,6 +449,7 @@ def log_daily_effort(request):
             task.hours_logged = float(task.hours_logged or 0) + hours_added
             task.save()
 
+            # pyrefly: ignore [missing-attribute]
             DailyEffortLog.objects.create(
                 task=task,
                 user=user,
@@ -424,8 +467,10 @@ def log_daily_effort(request):
                 "remaining": max(0, remaining)
             }, status=200)
 
+    # pyrefly: ignore [missing-attribute]
     except Task.DoesNotExist:
         return Response({"success": False, "message": "Task not found"}, status=404)
+    # pyrefly: ignore [missing-attribute]
     except User.DoesNotExist:
         return Response({"success": False, "message": "User not found"}, status=404)
     except Exception as e:
@@ -444,6 +489,7 @@ def update_task_status_with_tracker(request):
 
     try:
         # 1. Task Fetch aur Update
+        # pyrefly: ignore [missing-attribute]
         task = Task.objects.get(id=task_id)
         old_status = task.status
         task.status = new_status
@@ -454,12 +500,14 @@ def update_task_status_with_tracker(request):
 
         task.save()
 
+        # pyrefly: ignore [missing-attribute]
         project_tasks = Task.objects.filter(project_name=task.project_name)
         total_count = project_tasks.count()
         done_count = project_tasks.filter(status='Done').count()
 
         progress_percent = (done_count / total_count * 100) if total_count > 0 else 0
 
+        # pyrefly: ignore [missing-attribute]
         Project.objects.filter(name=task.project.name).update(
 
             status=task.project.status
@@ -472,15 +520,19 @@ def update_task_status_with_tracker(request):
             "project_progress": progress_percent
         })
 
+    # pyrefly: ignore [missing-attribute]
     except Task.DoesNotExist:
         return Response({"error": "Task not found"}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+    
+    
 
 @api_view(['GET'])
 def get_manager_team_tasks(request):
     manager_username = request.query_params.get('username')
     try:
+        # pyrefly: ignore [missing-attribute]
         tasks = Task.objects.filter(project__created_by__username=manager_username).select_related('assigned_to',
                                                                                                    'project')
         manager_data = [{
@@ -515,23 +567,28 @@ def get_dashboard_stats(request):
 
     try:
         # --- GLOBAL STATS (Using your Program model) ---
+        # pyrefly: ignore [missing-attribute]
         stats_data["total_programs"] = Program.objects.all().count()
+        # pyrefly: ignore [missing-attribute]
         stats_data["pending_approvals"] = Program.objects.filter(status__iexact='Pending').count()
 
         if username:
 
+            # pyrefly: ignore [missing-attribute]
             stats_data["active_tasks"] = Task.objects.filter(
                 assigned_to__username=username
             ).exclude(status__iexact='Done').count()
 
             # 2. Due This Week
             week_end = today + timedelta(days=7)
+            # pyrefly: ignore [missing-attribute]
             stats_data["due_this_week"] = Task.objects.filter(
                 assigned_to__username=username,
                 due_date__range=[today, week_end]
             ).exclude(status__iexact='Done').count()
 
             # --- HOURS LOGIC (DailyEffortLog table) ---
+            # pyrefly: ignore [missing-attribute]
             effort_query = DailyEffortLog.objects.filter(user__username=username)
 
 
@@ -540,6 +597,7 @@ def get_dashboard_stats(request):
 
             # Today's hours
             hours_today = effort_query.filter(log_date=today).aggregate(Sum('hours_added'))['hours_added__sum'] or 0
+            # pyrefly: ignore [bad-typed-dict-key]
             stats_data["hours_today"] = round(float(hours_today), 1)
 
             # Monthly hours for FTE (160 standard base)
@@ -548,6 +606,7 @@ def get_dashboard_stats(request):
                 log_date__year=today.year
             ).aggregate(Sum('hours_added'))['hours_added__sum'] or 0
 
+            # pyrefly: ignore [bad-typed-dict-key]
             stats_data["fte_score"] = round(float(total_month_hours) / 160, 2)
 
         return Response(stats_data, status=200)
@@ -565,8 +624,10 @@ def get_program_tracker_stats(request):
 
     try:
         program = get_object_or_404(Program, id=program_id)
+        # pyrefly: ignore [missing-attribute]
         projects = Project.objects.filter(program=program)
         project_ids = list(projects.values_list('id', flat=True))
+        # pyrefly: ignore [missing-attribute]
         all_tasks = Task.objects.filter(project_id__in=project_ids).select_related('assigned_to', 'sprint')
 
         # 1. Overall Progress
@@ -609,6 +670,7 @@ def get_program_tracker_stats(request):
 
         # 5. Velocity Data (Bar Chart)
         velocity_data = []
+        # pyrefly: ignore [missing-attribute]
         sprints = Sprint.objects.filter(project_id__in=project_ids)
         for s in sprints:
             s_tasks = all_tasks.filter(sprint=s)
@@ -643,9 +705,11 @@ def get_working_programs(request):
     username = request.query_params.get('username')
     try:
 
+        # pyrefly: ignore [missing-attribute]
         programs = Program.objects.filter(
             project_manager_assigned__username=username
         ).filter(
+            # pyrefly: ignore [unsupported-operation]
             Q(status__iexact='In Progress') |
             Q(status__iexact='Approved') |
             Q(status__iexact='Active')
@@ -655,6 +719,7 @@ def get_working_programs(request):
 
         for prog in programs:
 
+            # pyrefly: ignore [missing-attribute]
             project = Project.objects.filter(program=prog).first()
 
 
@@ -680,6 +745,7 @@ def get_working_programs(request):
 def program_tracker(request):
     program_id = request.query_params.get('program_id')
     program = get_object_or_404(Program, id=program_id)
+    # pyrefly: ignore [missing-attribute]
     tasks = Task.objects.filter(project__program_id=program_id).select_related('assigned_to', 'sprint')
     recent_activity = []
     for task in tasks.order_by('-id')[:5]:
@@ -691,6 +757,7 @@ def program_tracker(request):
             "status": task.status
         })
     sprint_data = []
+    # pyrefly: ignore [missing-attribute]
     unique_sprints = Sprint.objects.filter(project__program_id=program_id).distinct()
     for s in unique_sprints:
         s_tasks = tasks.filter(sprint=s)
@@ -730,12 +797,14 @@ def get_pm_dashboard_stats(request):
     try:
         pm_user = User.objects.get(username=username)
         # 1. Total assigned programs
+        # pyrefly: ignore [missing-attribute]
         assigned_programs = Program.objects.filter(project_manager_assigned=pm_user)
         stats_data['total_assigned'] = assigned_programs.count()
 
         # 2. PENDING PLANS logic
 
         assigned_pgm_ids = assigned_programs.values_list('id', flat=True)
+        # pyrefly: ignore [missing-attribute]
         programs_with_projects = Project.objects.filter(program_id__in=assigned_pgm_ids).values_list('program_id',
                                                                                                      flat=True)
 
@@ -743,6 +812,7 @@ def get_pm_dashboard_stats(request):
         stats_data['pending_plans'] = assigned_programs.exclude(id__in=programs_with_projects).count()
 
         # 3. AVG COMPLETION logic
+        # pyrefly: ignore [missing-attribute]
         pm_tasks = Task.objects.filter(project__created_by=pm_user)
         total_t = pm_tasks.count()
         if total_t > 0:
