@@ -38,6 +38,7 @@ const PMDashboard = ({ username, onLogout }) => {
   // --- CREATE TASK STATE ---
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [activeProjectForTask, setActiveProjectForTask] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
   const [taskData, setTaskData] = useState({
     title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: ''
   });
@@ -217,11 +218,11 @@ const lastStatItem = {
         })
       });
       if (response.ok) {
-        alert("✅ Success! Task Created.");
+        setToastMessage(`✅ Task '${taskData.title}' assigned to ${taskData.assigned_to} successfully!`);
         setShowTaskModal(false);
         setTaskData({ title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' });
         fetchData();
-        window.location.reload();
+        setTimeout(() => setToastMessage(null), 4000);
       }
     } catch (err) { alert("❌ Connection failed."); }
   };
@@ -272,6 +273,30 @@ const lastStatItem = {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f7fa', fontFamily: 'Segoe UI, sans-serif' }}>
+      
+      {/* TOAST NOTIFICATION */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '30px',
+          right: '30px',
+          background: '#10b981',
+          color: 'white',
+          padding: '16px 24px',
+          borderRadius: '10px',
+          boxShadow: '0 10px 25px -5px rgba(16, 185, 129, 0.4)',
+          zIndex: 9999,
+          fontWeight: '600',
+          fontSize: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          animation: 'slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}>
+          {toastMessage}
+        </div>
+      )}
+
       {/* SIDEBAR */}
       <div style={sidebarStyle}>
         <div style={logoBox}>F FORGE</div>
@@ -347,11 +372,11 @@ const lastStatItem = {
                                     <div style={innerCardStyle}>
                                       <h5 style={innerTitleStyle}>👥 Project Team</h5>
                                       <table style={miniTableStyle}>
-                                        <thead><tr style={miniTheadStyle}><th style={miniThStyle}>Member</th><th style={miniThStyle}>Role</th><th style={miniThStyle}>FTE</th></tr></thead>
+                                        <thead><tr style={miniTheadStyle}><th style={miniThStyle}>Member</th><th style={miniThStyle}>Role</th><th style={miniThStyle}>FTE</th><th style={miniThStyle}>Tasks</th></tr></thead>
                                         <tbody>
                                           {project.team_members?.map((m, idx) => (
-                                            <tr key={idx} style={miniTrStyle}><td style={miniTdStyle}>{m.username}</td><td style={miniTdStyle}>{m.role}</td><td style={miniTdStyle}>{m.fte}</td></tr>
-                                          )) || <tr><td colSpan="3">No members</td></tr>}
+                                            <tr key={idx} style={miniTrStyle}><td style={miniTdStyle}>{m.username}</td><td style={miniTdStyle}>{m.role}</td><td style={miniTdStyle}>{m.fte}</td><td style={miniTdStyle}><span style={{background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold'}}>{m.task_count || 0}</span></td></tr>
+                                          )) || <tr><td colSpan="4">No members</td></tr>}
                                         </tbody>
                                       </table>
                                     </div>
@@ -856,6 +881,7 @@ const lastStatItem = {
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         
         .fade-in { animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
         .pulse-dot { width: 8px; height: 8px; background: #10b981; borderRadius: 50%; animation: pulse 2s infinite; }

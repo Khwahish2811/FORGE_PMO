@@ -74,7 +74,8 @@ class ProjectSerializer(serializers.ModelSerializer):
             return [{
                 "username": m.user.username if m.user else "Unknown",
                 "role": m.role if hasattr(m, 'role') else "Dev",
-                "fte": float(m.fte_score) if m.fte_score else 0.0
+                "fte": float(m.fte_score) if m.fte_score else 0.0,
+                "task_count": Task.objects.filter(project=obj, assigned_to=m.user).count()
             } for m in members]
         except:
             return []
