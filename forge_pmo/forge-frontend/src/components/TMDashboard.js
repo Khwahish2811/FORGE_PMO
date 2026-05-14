@@ -23,6 +23,7 @@ const TMDashboard = ({ user, onLogout }) => {
   const [totalTime, setTotalTime] = useState(25 * 60); // Total selected duration
   const [timerLeft, setTimerLeft] = useState(25 * 60);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [focusHistory, setFocusHistory] = useState({});
   const timerRef = useRef(null);
 
   const showToast = (msg, type = 'success') => {
@@ -131,9 +132,15 @@ const TMDashboard = ({ user, onLogout }) => {
       // Calculate how many minutes were spent
       const secondsSpent = totalTime - timerLeft;
       const hoursSpent = Math.max(0.1, Math.round((secondsSpent / 3600) * 10) / 10); // Round to 1 decimal, min 0.1
+      const sessionMins = Math.round(secondsSpent / 60);
+      const sessionType = totalTime === 15 * 60 ? 'Quick Fix' : totalTime === 25 * 60 ? 'Deep Work' : totalTime === 45 * 60 ? 'Hyper Focus' : 'Flow State';
       
       if (focusTask) {
           setDailyInput(prev => ({...prev, [focusTask.id]: (prev[focusTask.id] || 0) + hoursSpent}));
+          setFocusHistory(prev => {
+              const currentHistory = prev[focusTask.id] || [];
+              return { ...prev, [focusTask.id]: [...currentHistory, { type: sessionType, mins: sessionMins }] };
+          });
       }
       showToast(`Logged ${hoursSpent}h (${Math.round(secondsSpent/60)} mins) for your session!`, 'success');
       setIsFocusMode(false);
@@ -177,6 +184,7 @@ const TMDashboard = ({ user, onLogout }) => {
       if (allOk) {
           showToast('✅ Daily Effort Saved Successfully!', 'success');
           setDailyInput({});
+          setFocusHistory({});
           await fetchTasks();
           await fetchDashboardStats();
       } else {
@@ -499,11 +507,21 @@ const TMDashboard = ({ user, onLogout }) => {
                </div>
                
                <div style={effortGrid}>
-                   {currentProjectTasks.filter(t => t.status !== 'Done').map(task => (
+                   {currentProjectTasks.filter(t => t.status !== 'Done').map(task => {
+                       const taskHistory = focusHistory[task.id] || [];
+                       const totalFocusMins = taskHistory.reduce((sum, h) => sum + h.mins, 0);
+                       const isDanger = totalFocusMins > 25;
+                       
+                       return (
                        <div key={task.id} style={effortRow}>
                            <div style={{flex: 1}}>
                               <h4 style={{margin: '0 0 4px 0', fontSize: '14px', color: '#0F172A'}}>{task.task_title}</h4>
                               <span style={badgeStatusOutline(task.status)}>{task.status}</span>
+                              {taskHistory.length > 0 && (
+                                  <div style={{marginTop: '10px', fontSize: '12px', color: isDanger ? '#ef4444' : '#10B981', fontWeight: '600', padding: '8px', background: isDanger ? '#fef2f2' : '#ecfdf5', borderRadius: '6px', border: `1px solid ${isDanger ? '#fecaca' : '#a7f3d0'}`, display: 'inline-block'}}>
+                                      ⚡ Focused today: {taskHistory.map(h => `${h.mins}m (${h.type})`).join(' + ')} = {totalFocusMins}m total
+                                  </div>
+                              )}
                            </div>
                            <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
                               <span style={{fontSize: '12px', color: '#64748B'}}>Total: {task.hours_logged || 0}h</span>
@@ -520,7 +538,7 @@ const TMDashboard = ({ user, onLogout }) => {
                               </div>
                            </div>
                        </div>
-                   ))}
+                   )})}
                    {currentProjectTasks.filter(t => t.status !== 'Done').length === 0 && (
                        <div style={{textAlign: 'center', padding: '30px', color: '#94a3b8', background: '#f8fafc', borderRadius: '8px'}}>No active tasks to log effort against.</div>
                    )}
@@ -535,7 +553,7 @@ const TMDashboard = ({ user, onLogout }) => {
 
 // --- STYLES ---
 const layoutContainer = { display: 'flex', height: '100vh', backgroundColor: '#f8fafc', overflow: 'hidden', fontFamily: 'Inter, system-ui, sans-serif' };
-const sidebarStyle = { width: '260px', backgroundColor: '#0F172A', color: '#fff', padding: '25px', display: 'flex', flexDirection: 'column', flexShrink: 0, boxShadow: '4px 0 15px rgba(0,0,0,0.05)' };
+const sidebarStyle = { width: '260px', backgroundColor: '#1B3A6B', color: '#fff', padding: '25px', display: 'flex', flexDirection: 'column', flexShrink: 0, boxShadow: '4px 0 15px rgba(0,0,0,0.05)' };
 const logoSection = { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px' };
 const logoCircle = { width: '32px', height: '32px', background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', boxShadow: '0 4px 10px rgba(59,130,246,0.3)' };
 const logoText = { fontSize: '16px', fontWeight: '700', letterSpacing: '0.5px' };
