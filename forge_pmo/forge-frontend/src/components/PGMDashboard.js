@@ -34,6 +34,12 @@ const PGMDashboard = ({ username, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showTrackerModal, setShowTrackerModal] = useState(false);
   const [selectedProgramStats, setSelectedProgramStats] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const showToast = (msg, type = 'success') => {
+    setToastMessage({ msg, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
   // --- 1. Fetch Data ---
   const fetchData = useCallback(async () => {
@@ -58,14 +64,14 @@ const PGMDashboard = ({ username, onLogout }) => {
     fetchData();
     const interval = setInterval(() => {
         fetchData();
-    }, 5000); // Auto refresh every 5 seconds
+    }, 30000); // Auto refresh every 30 seconds
     return () => clearInterval(interval);
   }, [fetchData]);
 
   // --- 2. Action Handlers (Original Functions Preserved) ---
   const handleAssignPM = async (programId) => {
     const pmId = selectedPMs[programId];
-    if (!pmId) return alert("Select a PM first!");
+    if (!pmId) { showToast('⚠️ Please select a PM first!', 'warning'); return; }
     try {
       const res = await fetch('http://127.0.0.1:8000/api/assign-pm/', {
         method: 'POST',
@@ -73,11 +79,10 @@ const PGMDashboard = ({ username, onLogout }) => {
         body: JSON.stringify({ program_id: programId, pm_id: pmId, manager_name: username })
       });
       if (res.ok) { 
-        alert("PM Assigned!"); 
+        showToast('✅ Project Manager assigned successfully!', 'success');
         fetchData(); 
-        window.location.reload(); 
       }
-    } catch (err) { alert("Error!"); }
+    } catch (err) { showToast('❌ Connection error. Please try again.', 'error'); }
   };
 
   const handleReviewAction = async (projectId, decision) => {
@@ -88,15 +93,14 @@ const PGMDashboard = ({ username, onLogout }) => {
             body: JSON.stringify({ project_id: projectId, decision: decision })
         });
         if (response.ok) {
-            alert(`Project ${decision === 'approve' ? 'Approved' : 'Rejected'}!`);
+            showToast(`✅ Project ${decision === 'approve' ? 'Approved' : 'Rejected'} successfully!`, decision === 'approve' ? 'success' : 'warning');
             setShowReviewModal(false);
             fetchData();
-            window.location.reload();
         } else {
             const errorData = await response.json();
-            alert("Error: " + (errorData.error || "Action failed"));
+            showToast('❌ Error: ' + (errorData.error || 'Action failed'), 'error');
         }
-    } catch (err) { alert("Failed to connect to the server."); }
+    } catch (err) { showToast('❌ Failed to connect to the server.', 'error'); }
   };
 
   const handleCreateProgram = async (e) => {
@@ -114,37 +118,30 @@ const PGMDashboard = ({ username, onLogout }) => {
         body: data
       });
       if (res.ok) {
-        alert("Program created!");
+        showToast('🚀 Program created successfully!', 'success');
         setShowModal(false);
         setFormData({ name: '', description: '', start_date: '', end_date: '', document: null });
         fetchData();
-        window.location.reload();
       }
-    } catch (err) { alert("Error connecting to server!"); }
+    } catch (err) { showToast('❌ Error connecting to server!', 'error'); }
   };
 
   const handleDecision = async (projectId, decision) => {
     try {
       const response = await fetch('http://127.0.0.1:8000/api/approve-project-plan/', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          project_id: projectId,
-          decision: decision
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId, decision: decision })
       });
       const data = await response.json();
       if (data.success) {
-        alert(data.message);
+        showToast(`✅ ${data.message}`, decision === 'approve' ? 'success' : 'warning');
         setShowReviewModal(false);
         fetchData();
-        window.location.reload();
       }
     } catch (error) {
       console.error("Error:", error);
-      alert("Action failed!");
+      showToast('❌ Action failed! Please try again.', 'error');
     }
   };
 
@@ -157,10 +154,10 @@ const PGMDashboard = ({ username, onLogout }) => {
         setSelectedProgramStats(data);
         setShowTrackerModal(true);
       } else {
-        alert("Tracker data not available.");
+        showToast('⚠️ Tracker data not available for this program.', 'warning');
       }
     } catch (err) {
-      alert("Error fetching tracker data.");
+      showToast('❌ Error fetching tracker data.', 'error');
     } finally {
       setLoadingStats(false);
     }
@@ -188,6 +185,19 @@ const PGMDashboard = ({ username, onLogout }) => {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f7fa', fontFamily: 'Segoe UI' }}>
+
+      {/* TOAST NOTIFICATION */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed', top: '30px', right: '30px', zIndex: 9999,
+          background: toastMessage.type === 'error' ? '#ef4444' : toastMessage.type === 'warning' ? '#f59e0b' : '#10b981',
+          color: 'white', padding: '16px 24px', borderRadius: '10px', fontWeight: '600', fontSize: '14px',
+          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
+          animation: 'slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}>
+          {toastMessage.msg}
+        </div>
+      )}
 
       {/* SIDEBAR */}
       <div style={sidebarStyle}>

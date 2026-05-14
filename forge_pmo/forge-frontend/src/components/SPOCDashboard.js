@@ -13,6 +13,12 @@ const SPOCDashboard = ({ username, onLogout }) => {
   const [showTrackerModal, setShowTrackerModal] = useState(false);
   const [selectedProgramStats, setSelectedProgramStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const showToast = (msg, type = 'success') => {
+    setToastMessage({ msg, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
   const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -44,7 +50,7 @@ const SPOCDashboard = ({ username, onLogout }) => {
     fetchData();
     const interval = setInterval(() => {
         fetchData(true);
-    }, 5000); // Auto refresh every 5 seconds
+    }, 30000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -56,12 +62,11 @@ const SPOCDashboard = ({ username, onLogout }) => {
         body: JSON.stringify({ id: programId, status: newStatus })
       });
       if (response.ok) {
-        alert(`Program ${newStatus} successfully!`);
+        showToast(`✅ Program ${newStatus} successfully!`, newStatus === 'Approved' ? 'success' : 'warning');
         fetchData();
-        window.location.reload();
       }
     } catch (err) {
-      alert("Backend error!");
+      showToast('❌ Backend error! Please try again.', 'error');
     }
   };
 
@@ -100,7 +105,8 @@ const SPOCDashboard = ({ username, onLogout }) => {
 
   const downloadDocument = async (docPath) => {
     if (!docPath || docPath === "null" || docPath === "undefined") {
-      return alert("No document was uploaded for this program.");
+      showToast('⚠️ No document was uploaded for this program.', 'warning');
+      return;
     }
     const backendBase = window.location.origin.includes('3000') 
         ? window.location.origin.replace(':3000', ':8000') 
@@ -138,6 +144,18 @@ const SPOCDashboard = ({ username, onLogout }) => {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f5f0' }}>
+      {/* TOAST NOTIFICATION */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed', top: '30px', right: '30px', zIndex: 9999,
+          background: toastMessage.type === 'error' ? '#ef4444' : toastMessage.type === 'warning' ? '#f59e0b' : '#10b981',
+          color: 'white', padding: '16px 24px', borderRadius: '10px', fontWeight: '600', fontSize: '14px',
+          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
+          animation: 'slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}>
+          {toastMessage.msg}
+        </div>
+      )}
       {/* SIDEBAR */}
       <div style={sidebarStyle}>
         <div style={logoBox}>F FORGE</div>

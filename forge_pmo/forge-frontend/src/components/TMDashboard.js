@@ -16,6 +16,12 @@ const TMDashboard = ({ user, onLogout }) => {
     total_programs: 0,
     daily_limit: 9
   });
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const showToast = (msg, type = 'success') => {
+    setToastMessage({ msg, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
   const totalSprintCapacity = 20;
 
@@ -116,7 +122,7 @@ const TMDashboard = ({ user, onLogout }) => {
         fetchTasks();
         const interval = setInterval(() => {
             fetchTasks();
-        }, 5000); // Auto refresh every 5 seconds
+        }, 30000);
         return () => clearInterval(interval);
     }
   }, [user]);
@@ -126,7 +132,7 @@ const TMDashboard = ({ user, onLogout }) => {
         fetchDashboardStats();
         const interval = setInterval(() => {
             fetchDashboardStats();
-        }, 5000); // Auto refresh every 5 seconds
+        }, 30000);
         return () => clearInterval(interval);
     }
   }, [user, selectedProjectId]);
@@ -137,12 +143,10 @@ const TMDashboard = ({ user, onLogout }) => {
 
   const saveDailyLog = async () => {
     const taskIdsToUpdate = Object.keys(dailyInput).filter(id => dailyInput[id] > 0);
-
     if (taskIdsToUpdate.length === 0) {
-        alert("Please enter hours for at least one task.");
+        showToast('⚠️ Please enter hours for at least one task.', 'warning');
         return;
     }
-
     setLoading(true);
     try {
       const updates = taskIdsToUpdate.map(taskId => {
@@ -157,22 +161,19 @@ const TMDashboard = ({ user, onLogout }) => {
           })
         });
       });
-
       const results = await Promise.all(updates);
       const allOk = results.every(res => res.ok);
-
       if (allOk) {
-          alert("Daily Effort Saved Successfully!");
+          showToast('✅ Daily Effort Saved Successfully!', 'success');
           setDailyInput({});
           await fetchTasks();
           await fetchDashboardStats();
-          window.location.reload();
       } else {
           const errorData = await results[0].json();
-          alert(`Error: ${errorData.message || "Failed to save effort"}`);
+          showToast(`❌ Error: ${errorData.message || 'Failed to save effort'}`, 'error');
       }
     } catch (err) {
-        alert("Server connection failed.");
+        showToast('❌ Server connection failed.', 'error');
     } finally {
         setLoading(false);
     }
@@ -184,15 +185,11 @@ const TMDashboard = ({ user, onLogout }) => {
       const response = await fetch('http://127.0.0.1:8000/api/update-sprint-status/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sprint_id: sprintId,
-          status: newStatus
-        })
+        body: JSON.stringify({ sprint_id: sprintId, status: newStatus })
       });
       if (response.ok) {
         await fetchTasks();
         await fetchDashboardStats();
-        window.location.reload();
       }
     } catch (err) { console.error(err); }
   };
@@ -202,15 +199,11 @@ const TMDashboard = ({ user, onLogout }) => {
      const response = await fetch('http://127.0.0.1:8000/api/update-task-status-with-tracker/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            task_id: taskId,
-            status: newStatus
-        })
+        body: JSON.stringify({ task_id: taskId, status: newStatus })
       });
       if (response.ok) {
           fetchTasks();
           fetchDashboardStats();
-          window.location.reload();
       }
     } catch (err) { console.error(err); }
   };
@@ -228,6 +221,18 @@ const TMDashboard = ({ user, onLogout }) => {
 
   return (
     <div style={layoutContainer}>
+      {/* TOAST NOTIFICATION */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed', top: '30px', right: '30px', zIndex: 9999,
+          background: toastMessage.type === 'error' ? '#ef4444' : toastMessage.type === 'warning' ? '#f59e0b' : '#10b981',
+          color: 'white', padding: '16px 24px', borderRadius: '10px', fontWeight: '600', fontSize: '14px',
+          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
+          animation: 'slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}>
+          {toastMessage.msg}
+        </div>
+      )}
       {/* SIDEBAR - Fixed with Scroll */}
       <div style={sidebarStyle}>
         <div style={logoSection}><div style={logoCircle}>F</div><span style={logoText}>FORGE PMO</span></div>

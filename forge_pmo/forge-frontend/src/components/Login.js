@@ -3,28 +3,25 @@ import React, { useState } from 'react';
 const Login = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    setErrorMsg('');
     try {
-      // Django API call
       const response = await fetch('http://127.0.0.1:8000/api/login/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
-
       const data = await response.json();
-
       if (data.success) {
-
         onLogin(data.username, data.role);
       } else {
-        alert("Invalid Username or Password! Please check your credentials.");
+        setErrorMsg('❌ Invalid Username or Password! Please check your credentials.');
       }
     } catch (err) {
-      alert("Backend se connection nahi ho raha. Check karein Django Server (runserver) chal raha hai ya nahi.");
+      setErrorMsg('❌ Cannot connect to server. Please ensure the Django server is running.');
     }
   };
 
@@ -51,7 +48,7 @@ const Login = ({ onLogin }) => {
             />
           </div>
 
-          <div style={{ marginBottom: '25px' }}>
+          <div style={{ marginBottom: '20px' }}>
             <label style={{ display: 'block', fontSize: '12px', color: '#666', marginBottom: '8px', fontWeight: 'bold' }}>Password</label>
             <input
               type="password"
@@ -62,6 +59,17 @@ const Login = ({ onLogin }) => {
               style={{ width: '100%', padding: '10px', border: '1.5px solid #b0c4de' }}
             />
           </div>
+
+          {errorMsg && (
+            <div style={{
+              background: '#fee2e2', color: '#991b1b',
+              padding: '10px 14px', borderRadius: '6px',
+              fontSize: '13px', fontWeight: '600',
+              marginBottom: '15px', borderLeft: '4px solid #ef4444'
+            }}>
+              {errorMsg}
+            </div>
+          )}
 
           <button type="submit" style={{ width: '100%', padding: '12px', background: '#1B3A6B', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
             LOGIN
