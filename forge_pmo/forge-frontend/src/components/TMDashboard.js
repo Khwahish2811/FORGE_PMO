@@ -1,6 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import { Chart } from "react-google-charts";
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 const TMDashboard = ({ user, onLogout }) => {
   const [tasks, setTasks] = useState([]);
@@ -18,61 +16,19 @@ const TMDashboard = ({ user, onLogout }) => {
   });
   const [toastMessage, setToastMessage] = useState(null);
 
+  // Focus Mode State
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [focusTask, setFocusTask] = useState(null);
+  const [timerLeft, setTimerLeft] = useState(25 * 60); // 25 mins
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const timerRef = useRef(null);
+
   const showToast = (msg, type = 'success') => {
     setToastMessage({ msg, type });
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const totalSprintCapacity = 20;
-
-  const currentProjectTasks = tasks.filter(t => t.project_name === selectedProjectId);
-
-  // Bar Chart Data
-  const sprintCounts = currentProjectTasks.reduce((acc, task) => {
-      const sName = task.sprint_name || 'Unassigned';
-      acc[sName] = (acc[sName] || 0) + 1;
-      return acc;
-  }, {});
-  const barData = Object.keys(sprintCounts).map(name => ({ name, tasks: sprintCounts[name] }));
-
-  // Pie Chart Data
-  const doneCount = currentProjectTasks.filter(t => t.status === 'Done').length;
-  const pendingCount = currentProjectTasks.length - doneCount;
-  const pieData = [
-      { name: 'Completed', value: doneCount, color: '#10B981' },
-      { name: 'Pending', value: pendingCount, color: '#EF4444' }
-  ];
-
-  // Gantt Chart Data Mapping
-  const ganttColumns = [
-    { type: "string", label: "Task ID" },
-    { type: "string", label: "Task Name" },
-    { type: "date", label: "Start Date" },
-    { type: "date", label: "End Date" },
-    { type: "number", label: "Duration" },
-    { type: "number", label: "Percent Complete" },
-    { type: "string", label: "Dependencies" },
-  ];
-
-  const ganttData = [
-    ganttColumns,
-    ...currentProjectTasks.map((task) => {
-      const start = new Date(2026, 4, 1);
-      const end = task.due_date ? new Date(task.due_date) : new Date(2026, 4, 15);
-
-      return [
-        String(task.id),
-        task.task_title || "Task",
-        start,
-        end,
-        null,
-        task.status === 'Done' ? 100 : (task.status === 'In Progress' ? 50 : 0),
-        null,
-      ];
-    }),
-  ];
-
-  const fetchDashboardStats = async () => {
+  const fetchDashboardStats = useCallback(async () => {
     try {
       let url = `http://127.0.0.1:8000/api/get-dashboard-stats/?username=${user}`;
       if (selectedProjectId) {
@@ -84,9 +40,9 @@ const TMDashboard = ({ user, onLogout }) => {
         setStats(data);
       }
     } catch (err) { console.error("Stats fetch error:", err); }
-  };
+  }, [user, selectedProjectId]);
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       const response = await fetch(`http://127.0.0.1:8000/api/get-kanban-tasks/?username=${user}`);
       if (response.ok) {
@@ -103,13 +59,12 @@ const TMDashboard = ({ user, onLogout }) => {
             };
           }
         });
-
         const uniqueProjects = Object.values(projMap);
         setProjects(uniqueProjects);
       }
     } catch (err) { console.error("Fetch error:", err); }
     finally { setLoading(false); }
-  };
+  }, [user]);
 
   useEffect(() => {
     if (projects.length > 0 && !selectedProjectId) {
@@ -120,22 +75,45 @@ const TMDashboard = ({ user, onLogout }) => {
   useEffect(() => {
     if (user) {
         fetchTasks();
-        const interval = setInterval(() => {
-            fetchTasks();
-        }, 30000);
+        const interval = setInterval(() => { fetchTasks(); }, 30000);
         return () => clearInterval(interval);
     }
-  }, [user]);
+  }, [user, fetchTasks]);
 
   useEffect(() => {
     if (user && selectedProjectId) {
         fetchDashboardStats();
-        const interval = setInterval(() => {
-            fetchDashboardStats();
-        }, 30000);
+        const interval = setInterval(() => { fetchDashboardStats(); }, 30000);
         return () => clearInterval(interval);
     }
-  }, [user, selectedProjectId]);
+  }, [user, selectedProjectId, fetchDashboardStats]);
+
+  // Focus Timer Logic
+  useEffect(() => {
+    if (isTimerRunning && timerLeft > 0) {
+      timerRef.current = setInterval(() => {
+        setTimerLeft(prev => prev - 1);
+      }, 1000);
+    } else if (timerLeft === 0) {
+      setIsTimerRunning(false);
+      showToast('🎉 Focus session completed! Logging 25 mins (0.4h) to your effort log.', 'success');
+      if (focusTask) {
+         setDailyInput(prev => ({...prev, [focusTask.id]: (prev[focusTask.id] || 0) + 0.4}));
+      }
+      setIsFocusMode(false);
+      setTimerLeft(25 * 60);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [isTimerRunning, timerLeft, focusTask]);
+
+  const toggleTimer = () => setIsTimerRunning(!isTimerRunning);
+  
+  const startFocusForTask = (task) => {
+     setFocusTask(task);
+     setIsFocusMode(true);
+     setTimerLeft(25 * 60);
+     setIsTimerRunning(true);
+  };
 
   const handleDailyEffortChange = (taskId, hours) => {
     setDailyInput(prev => ({ ...prev, [taskId]: parseFloat(hours || 0) }));
@@ -190,6 +168,7 @@ const TMDashboard = ({ user, onLogout }) => {
       if (response.ok) {
         await fetchTasks();
         await fetchDashboardStats();
+        showToast(`✅ Sprint is now ${newStatus}`, 'success');
       }
     } catch (err) { console.error(err); }
   };
@@ -204,20 +183,35 @@ const TMDashboard = ({ user, onLogout }) => {
       if (response.ok) {
           fetchTasks();
           fetchDashboardStats();
+          showToast(`Task moved to ${newStatus}`, 'success');
       }
     } catch (err) { console.error(err); }
   };
 
-  const totalTasks = currentProjectTasks.length;
-  const completedTasks = currentProjectTasks.filter(t => t.status === 'Done').length;
-  const progressPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
+  const currentProjectTasks = tasks.filter(t => t.project_name === selectedProjectId);
   const tasksBySprint = currentProjectTasks.reduce((groups, task) => {
     const sprint = task.sprint_name || 'Unassigned';
     if (!groups[sprint]) groups[sprint] = [];
     groups[sprint].push(task);
     return groups;
   }, {});
+
+  // Smart Agenda Logic: find the most urgent task (In Progress, closest due date)
+  let urgentTask = null;
+  const activeTasks = currentProjectTasks.filter(t => t.status !== 'Done');
+  if (activeTasks.length > 0) {
+     urgentTask = activeTasks.sort((a, b) => new Date(a.due_date || '2099-01-01') - new Date(b.due_date || '2099-01-01'))[0];
+  }
+
+  // Wellness Calculation
+  const utilization = stats.hours_today / (stats.daily_limit || 9);
+  let wellnessStatus = 'Optimal';
+  let wellnessColor = '#10B981';
+  let wellnessMsg = "You're pacing perfectly for today.";
+  if (utilization < 0.3 && stats.hours_today !== 0) { wellnessStatus = 'Under-utilized'; wellnessColor = '#3B82F6'; wellnessMsg = "Capacity available for more tasks."; }
+  else if (utilization > 0.8) { wellnessStatus = 'At Risk of Burnout'; wellnessColor = '#EF4444'; wellnessMsg = "Approaching daily limit. Time to wrap up!"; }
+  if (stats.hours_today === 0) { wellnessStatus = 'Fresh Start'; wellnessColor = '#8B5CF6'; wellnessMsg = "Ready to tackle the day!"; }
+
 
   return (
     <div style={layoutContainer}>
@@ -233,225 +227,157 @@ const TMDashboard = ({ user, onLogout }) => {
           {toastMessage.msg}
         </div>
       )}
-      {/* SIDEBAR - Fixed with Scroll */}
-      <div style={sidebarStyle}>
-        <div style={logoSection}><div style={logoCircle}>F</div><span style={logoText}>FORGE PMO</span></div>
 
-        {/* Scrollable Area Start */}
+      {/* FOCUS MODE OVERLAY */}
+      {isFocusMode && focusTask && (
+        <div style={focusOverlay}>
+            <div style={focusCard}>
+               <h2 style={{margin: '0 0 10px 0', color: '#1B3A6B'}}>🎯 Focus Mode</h2>
+               <p style={{fontSize: '14px', color: '#64748b'}}>Focusing on: <b>{focusTask.task_title}</b></p>
+               <div style={timerDisplay}>
+                  {Math.floor(timerLeft / 60).toString().padStart(2, '0')}:
+                  {(timerLeft % 60).toString().padStart(2, '0')}
+               </div>
+               <div style={{display: 'flex', gap: '10px', marginTop: '20px'}}>
+                  <button onClick={toggleTimer} style={btnFocusPrimary}>{isTimerRunning ? 'PAUSE' : 'RESUME'}</button>
+                  <button onClick={() => {setIsFocusMode(false); setIsTimerRunning(false);}} style={btnFocusSecondary}>CANCEL</button>
+               </div>
+            </div>
+        </div>
+      )}
+
+      {/* SIDEBAR */}
+      <div style={sidebarStyle}>
+        <div style={logoSection}><div style={logoCircle}>F</div><span style={logoText}>FORGE Workspace</span></div>
+
         <div style={sidebarScrollArea}>
             <div style={navGroup}>
                 <p style={navLabel}>NAVIGATION</p>
-                <div style={navItemActive}>📊 My Dashboard</div>
-                <div style={navItem}>⏱ Timesheet Log</div>
+                <div style={navItemActive}>⚡ My Workspace</div>
             </div>
             <div style={navGroup}>
                 <p style={navLabel}>MY PROJECTS</p>
                 {projects.map(proj => (
                     <div key={proj.name} onClick={() => setSelectedProjectId(proj.name)} style={selectedProjectId === proj.name ? projectItemActive : projectItem}>
-                        ● {proj.name}
-                        <div style={subLabel}>{proj.sprint}</div>
+                        <span style={{marginRight: '8px', color: selectedProjectId === proj.name ? '#60A5FA' : '#cbd5e1'}}>●</span> 
+                        {proj.name}
                     </div>
                 ))}
             </div>
         </div>
-        {/* Scrollable Area End */}
-
         <button onClick={onLogout} style={logoutBtnSide}>LOGOUT</button>
       </div>
 
       <div style={mainContent}>
-        {/* NEW TOP HEADER - With User Info and Logout */}
+        {/* HEADER */}
         <div style={topHeaderStyle}>
-            <h2 style={topTitleStyle}>Team Member Dashboard</h2>
-            <div style={userActionGroup}>
-                <span style={welcomeTextStyle}>Welcome, <b>{user}</b></span>
-                <div style={userAvatarStyle}>{user?.charAt(0).toUpperCase()}</div>
-                <button onClick={onLogout} style={topLogoutBtn}>LOGOUT</button>
+            <div>
+               <h2 style={topTitleStyle}>Hello, {user} 👋</h2>
+               <p style={{margin: 0, fontSize: '13px', color: '#64748B'}}>Here is your personalized workspace.</p>
             </div>
+            <div style={userAvatarStyle}>{user?.charAt(0).toUpperCase()}</div>
         </div>
 
-        {/* STATS HEADER */}
-        <div style={industryHeader}>
-            <div style={industryStatItem}>
-                <p style={indLabel}>ACTIVE TASKS</p>
-                <h2 style={indValue}>{stats.active_tasks}</h2>
-                <span style={indSub}>Across all projects</span>
-            </div>
-            <div style={industryStatItem}>
-                <p style={indLabel}>DUE THIS WEEK</p>
-                <h2 style={{...indValue, color: '#EF4444'}}>{stats.due_this_week}</h2>
-                <span style={indSub}>Needs attention</span>
-            </div>
-            <div style={{...industryStatItem, borderRight: 'none'}}>
-                <p style={indLabel}>TOTAL PROGRAMS</p>
-                <h2 style={indValue}>{stats.total_programs || 0}</h2>
-                <span style={indSub}>Live in Portfolio</span>
-            </div>
+        <div style={{display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '25px', padding: '25px'}}>
+           {/* SMART AGENDA */}
+           <div style={premiumCard}>
+              <h3 style={sectionTitlePremium}>🌟 Smart Agenda</h3>
+              {urgentTask ? (
+                  <div style={urgentTaskBox}>
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                         <div>
+                            <span style={priorityTagHi}>High Priority</span>
+                            <h4 style={{margin: '10px 0 5px 0', fontSize: '16px', color: '#0F172A'}}>{urgentTask.task_title}</h4>
+                            <p style={{margin: 0, fontSize: '12px', color: '#64748B'}}>Due: <b>{urgentTask.due_date}</b> • {urgentTask.project_name}</p>
+                         </div>
+                         <button onClick={() => startFocusForTask(urgentTask)} style={btnFocusStart}>
+                            🎯 Start Focus Mode
+                         </button>
+                      </div>
+                  </div>
+              ) : (
+                  <div style={emptyStateBox}>🎉 No urgent tasks! You are all caught up.</div>
+              )}
+           </div>
+
+           {/* WELLNESS GAUGE */}
+           <div style={premiumCard}>
+              <h3 style={sectionTitlePremium}>🔋 Wellness & Capacity</h3>
+              <div style={{display: 'flex', alignItems: 'center', gap: '20px', marginTop: '15px'}}>
+                 <div style={{width: '100px', height: '100px', borderRadius: '50%', background: `conic-gradient(${wellnessColor} ${utilization * 100}%, #f1f5f9 0)`, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                    <div style={{width: '75px', height: '75px', background: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column'}}>
+                       <span style={{fontSize: '20px', fontWeight: 'bold', color: '#1e293b'}}>{stats.hours_today}h</span>
+                    </div>
+                 </div>
+                 <div>
+                    <h4 style={{margin: '0 0 5px 0', color: wellnessColor, fontSize: '18px'}}>{wellnessStatus}</h4>
+                    <p style={{margin: 0, fontSize: '13px', color: '#64748B'}}>{wellnessMsg}</p>
+                    <p style={{margin: '5px 0 0 0', fontSize: '12px', color: '#94A3B8'}}>Daily Limit: {stats.daily_limit}h</p>
+                 </div>
+              </div>
+           </div>
         </div>
 
-        {/* PROJECT INFO BAR */}
-        <div style={projectInfoBar}>
-            <span style={{color: '#10B981'}}>● Viewing active project</span>
-            <div style={projectTitleRow}>
-                <strong>● {selectedProjectId} • {projects.find(p => p.name === selectedProjectId)?.sprint}</strong>
-                <span style={activeBadge}>Active</span>
-            </div>
-        </div>
-
-        {/* PROGRESS & FTE CARDS */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr', gap: '20px', padding: '0 25px 25px 25px' }}>
-            <div style={trackerContainerCompact}>
-                <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '8px'}}>
-                    <span style={trackerLabel}>Sprint Progress</span>
-                    <span style={trackerPercentage}>{progressPercentage}% Completed</span>
-                </div>
-                <div style={progressBarBg}>
-                    <div style={{...progressBarFill, width: `${progressPercentage}%`}}></div>
-                </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '15px' }}>
-                <div style={projectSpecificStatCard}>
-                    <p style={indLabel}>HOURS TODAY</p>
-                    <h3 style={{...indValueCompact, color: '#10B981'}}>{stats.hours_today}</h3>
-                    <span style={indSubCompact}>of {stats.daily_limit}h</span>
-                </div>
-                <div style={projectSpecificStatCard}>
-                    <p style={indLabel}>PROJECT FTE</p>
-                    <h3 style={indValueCompact}>{stats.fte_score}</h3>
-                    <span style={indSubCompact}>{stats.fte_score < 0.5 ? 'Low' : 'Good'}</span>
-                </div>
-            </div>
-        </div>
-
-        {/* CHARTS */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', padding: '0 25px 25px 25px' }}>
-            <div style={chartCardStyle}>
-                <h4 style={chartTitleStyleCustom}>TASKS PER SPRINT</h4>
-                <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={barData}>
-                        <XAxis dataKey="name" fontSize={10} stroke="#64748B" />
-                        <YAxis fontSize={10} stroke="#64748B" />
-                        <Tooltip />
-                        <Bar dataKey="tasks" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                </ResponsiveContainer>
-            </div>
-
-            <div style={chartCardStyle}>
-                <h4 style={chartTitleStyleCustom}>SPRINT PROGRESS</h4>
-                <ResponsiveContainer width="100%" height={200}>
-                    <PieChart>
-                        <Pie data={pieData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                            {pieData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
-                        </Pie>
-                        <Tooltip />
-                        <Legend verticalAlign="bottom" height={36}/>
-                    </PieChart>
-                </ResponsiveContainer>
-            </div>
-        </div>
-
-        {/* GANTT CHART */}
+        {/* INTERACTIVE KANBAN */}
         <div style={{ padding: '0 25px 25px 25px' }}>
-            <div style={chartCardStyle}>
-                <h4 style={chartTitleStyleCustom}>PROJECT TIMELINE (GANTT)</h4>
-                {currentProjectTasks.length > 0 ? (
-                    <Chart
-                        chartType="Gantt"
-                        width="100%"
-                        height="200px"
-                        data={ganttData}
-                        options={{
-                            height: 200,
-                            gantt: {
-                                trackHeight: 30,
-                                barHeight: 20,
-                                labelStyle: { fontSize: 12, color: '#334155' },
-                                criticalPathEnabled: false,
-                                innerGridHorizLine: { stroke: '#f1f5f9', strokeWidth: 1 }
-                            },
-                        }}
-                    />
-                ) : (
-                    <p style={{fontSize: '12px', color: '#64748B'}}>No tasks available for timeline.</p>
-                )}
-            </div>
-        </div>
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
+             <h3 style={sectionTitlePremium}>🚀 Sprint Execution</h3>
+          </div>
 
-        {/* KANBAN BOARD */}
-        <div style={{ padding: '0 25px 25px 25px' }}>
-          <h3 style={sectionTitle}>KANBAN BOARD</h3>
           {Object.keys(tasksBySprint).sort().map(sprintName => {
             const firstTask = tasksBySprint[sprintName][0];
             const sprintId = firstTask?.sprint_id;
             const sprintStatus = firstTask?.sprint_status || 'Planned';
 
             return (
-              <div key={sprintName} style={{marginBottom: '35px'}}>
-                <div style={{...sprintDivider, display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                  <span>📦 {sprintName.toUpperCase()}</span>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
-                    <span style={{
-                      fontSize: '10px',
-                      padding: '2px 8px',
-                      borderRadius: '10px',
-                      backgroundColor: sprintStatus === 'In Progress' ? '#dbeafe' : '#f1f5f9',
-                      color: sprintStatus === 'In Progress' ? '#1e40af' : '#64748b',
-                      fontWeight: 'bold'
-                    }}>
-                      {sprintStatus.toUpperCase()}
-                    </span>
-                    {sprintStatus === 'Planned' && (
-                      <button 
-                        onClick={() => updateSprintStatus(sprintId, 'In Progress')}
-                        style={{
-                          padding: '4px 12px',
-                          fontSize: '10px',
-                          backgroundColor: '#10B981',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        START SPRINT
-                      </button>
-                    )}
+              <div key={sprintName} style={{marginBottom: '40px'}}>
+                <div style={sprintHeader}>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+                     <span style={{fontSize: '16px', fontWeight: 'bold', color: '#1B3A6B'}}>{sprintName}</span>
+                     <span style={sprintBadge(sprintStatus)}>{sprintStatus}</span>
                   </div>
+                  {sprintStatus === 'Planned' && (
+                     <button onClick={() => updateSprintStatus(sprintId, 'In Progress')} style={btnStartSprint}>▶ Start Sprint</button>
+                  )}
                 </div>
+
               <div style={kanbanGrid}>
                 {['To Do', 'In Progress', 'Done'].map(col => (
                   <div key={col} style={columnStyle}>
-                    <p style={colTitle}>{col.toUpperCase()}</p>
+                    <div style={colTitleGroup}>
+                        <span style={colTitle}>{col}</span>
+                        <span style={colCount}>{tasksBySprint[sprintName].filter(t => t.status === col).length}</span>
+                    </div>
+                    <div style={cardListStyle}>
                     {tasksBySprint[sprintName].filter(t => t.status === col).map(task => (
-                      <div key={task.id} style={cardStyle}>
-                        <div style={{display:'flex', justifyContent:'space-between', marginBottom: '5px'}}>
-                           <span style={tagStyle}>{task.priority}</span>
-                           <small style={{color: '#94a3b8'}}>#{task.id}</small>
+                      <div key={task.id} style={cardStylePremium}>
+                        <div style={{display:'flex', justifyContent:'space-between', marginBottom: '8px', alignItems: 'center'}}>
+                           <span style={tagStyle(task.priority)}>{task.priority}</span>
+                           <small style={{color: '#94a3b8', fontSize: '10px'}}>#{task.id}</small>
                         </div>
                         <strong style={cardTitleStyleMain}>{task.task_title}</strong>
-                        <div style={detailBox}>
-                            <div style={detailRow}>👤 <b>User:</b> <span>{user}</span></div>
-                            <div style={detailRow}>👨‍💼 <b>SPOC/PM:</b> <span>{task.project_manager}</span></div>
-                            <div style={detailRow}>📁 <b>Project:</b> <span>{task.project_name}</span></div>
-                            <div style={{...detailRow, color:'#EF4444', fontWeight: '600'}}>📅 <b>Due:</b> <span>{task.due_date}</span></div>
+                        <div style={{fontSize: '11px', color: '#64748B', marginTop: '10px', display: 'flex', justifyContent: 'space-between'}}>
+                           <span>📅 {task.due_date}</span>
+                           <span>⏱ {task.hours_logged || 0}h logged</span>
                         </div>
 
                         <div style={cardActions}>
                             {task.status === 'To Do' && (
-                                <button onClick={() => updateStatus(task.id, 'In Progress')} style={{...moveBtn, backgroundColor: '#3B82F6', color: '#fff', border: 'none'}}>Start Dev →</button>
+                                <button onClick={() => updateStatus(task.id, 'In Progress')} style={moveBtnPrimary}>Start Work</button>
                             )}
                             {task.status === 'In Progress' && (
-                                <button onClick={() => updateStatus(task.id, 'Done')} style={finishBtn}>Done ✓</button>
+                                <>
+                                  <button onClick={() => startFocusForTask(task)} style={btnFocusSmall}>🎯 Focus</button>
+                                  <button onClick={() => updateStatus(task.id, 'Done')} style={finishBtn}>Mark Done</button>
+                                </>
                             )}
                             {task.status === 'Done' && (
-                                <button onClick={() => updateStatus(task.id, 'In Progress')} style={{...moveBtn, fontSize: '9px', border: '1px dashed #cbd5e1'}}>↩ Re-open</button>
+                                <button onClick={() => updateStatus(task.id, 'In Progress')} style={moveBtnSecondary}>Re-open</button>
                             )}
                         </div>
                       </div>
                     ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -460,108 +386,114 @@ const TMDashboard = ({ user, onLogout }) => {
         })}
         </div>
 
-        {/* EFFORT LOG */}
-        <div style={effortLogSection}>
-            <h3 style={sectionTitle}>TODAY'S EFFORT LOG</h3>
-            <table style={effortTable}>
-                <thead>
-                    <tr style={tableHeader}>
-                        <th style={{padding: '12px'}}>Task Name</th>
-                        <th>Status</th>
-                        <th>Daily Effort</th>
-                        <th>Total Consumed</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {currentProjectTasks.filter(t => t.status !== 'Done').map(task => (
-                        <tr key={task.id} style={tableRow}>
-                            <td style={{padding:'12px'}}>{task.task_title}</td>
-                            <td><span style={statusBadge}>{task.status}</span></td>
-                            <td>
-                                <input
-                                    type="number"
-                                    value={dailyInput[task.id] || ''}
-                                    style={tableInput}
-                                    placeholder="0.0"
-                                    onChange={(e) => handleDailyEffortChange(task.id, e.target.value)}
-                                />
-                            </td>
-                            <td><b>{task.hours_logged || 0} hrs</b></td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-            <button onClick={saveDailyLog} style={saveLogBtn} disabled={loading}>
-                {loading ? 'SAVING...' : 'SAVE DAILY EFFORT'}
-            </button>
+        {/* MODERN EFFORT LOG WIDGET */}
+        <div style={{ padding: '0 25px 50px 25px' }}>
+            <div style={effortWidget}>
+               <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
+                  <div>
+                     <h3 style={{margin: '0 0 5px 0', color: '#1B3A6B', fontSize: '18px'}}>⏱ Daily Effort Log</h3>
+                     <p style={{margin: 0, fontSize: '13px', color: '#64748b'}}>Log your hours against active tasks for today.</p>
+                  </div>
+                  <button onClick={saveDailyLog} style={btnSaveLog} disabled={loading}>
+                      {loading ? 'Saving...' : '💾 Save Effort'}
+                  </button>
+               </div>
+               
+               <div style={effortGrid}>
+                   {currentProjectTasks.filter(t => t.status !== 'Done').map(task => (
+                       <div key={task.id} style={effortRow}>
+                           <div style={{flex: 1}}>
+                              <h4 style={{margin: '0 0 4px 0', fontSize: '14px', color: '#0F172A'}}>{task.task_title}</h4>
+                              <span style={badgeStatusOutline(task.status)}>{task.status}</span>
+                           </div>
+                           <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+                              <span style={{fontSize: '12px', color: '#64748B'}}>Total: {task.hours_logged || 0}h</span>
+                              <div style={inputWrapper}>
+                                  <input
+                                      type="number"
+                                      step="0.1"
+                                      value={dailyInput[task.id] || ''}
+                                      style={tableInputPremium}
+                                      placeholder="0.0"
+                                      onChange={(e) => handleDailyEffortChange(task.id, e.target.value)}
+                                  />
+                                  <span style={{fontSize: '12px', color: '#94a3b8', position: 'absolute', right: '10px', top: '10px'}}>hrs</span>
+                              </div>
+                           </div>
+                       </div>
+                   ))}
+                   {currentProjectTasks.filter(t => t.status !== 'Done').length === 0 && (
+                       <div style={{textAlign: 'center', padding: '30px', color: '#94a3b8', background: '#f8fafc', borderRadius: '8px'}}>No active tasks to log effort against.</div>
+                   )}
+               </div>
+            </div>
         </div>
+
       </div>
     </div>
   );
 };
 
-// --- STYLES (Cleaned & Updated) ---
-const topHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 25px', background: '#fff', borderBottom: '1px solid #e2e8f0' };
-const topTitleStyle = { fontSize: '18px', fontWeight: 'bold', color: '#1B3A6B', margin: 0 };
-const userActionGroup = { display: 'flex', alignItems: 'center', gap: '15px' };
-const welcomeTextStyle = { fontSize: '13px', color: '#475569' };
-const userAvatarStyle = { width: '32px', height: '32px', background: '#3B82F6', color: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '14px' };
-const topLogoutBtn = { background: '#EF4444', color: '#fff', border: 'none', padding: '6px 15px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' };
-
-const sidebarScrollArea = { flex: 1, overflowY: 'auto', paddingRight: '5px' }; // This makes the projects scrollable
-
-const projectSpecificStatCard = { flex: 1, background: '#fff', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', justifyContent: 'center' };
-const trackerContainerCompact = { padding: '20px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' };
-const indValueCompact = { fontSize: '18px', fontWeight: '800', margin: '2px 0' };
-const indSubCompact = { fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase' };
-
-const chartCardStyle = { background: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' };
-const chartTitleStyleCustom = { fontSize: '12px', color: '#475569', marginBottom: '15px', fontWeight: 'bold' };
-const cardTitleStyleMain = { fontSize: '13px', color: '#1E293B', marginTop: '5px', display: 'block', borderBottom: '1px solid #eee', paddingBottom: '8px' };
-const industryHeader = { display: 'flex', background: '#fff', borderBottom: '2px solid #1B3A6B', padding: '15px 0' };
-const industryStatItem = { flex: 1, padding: '0 25px', borderRight: '1px solid #e2e8f0' };
-const indLabel = { fontSize: '10px', color: '#64748B', fontWeight: 'bold', margin: 0 };
-const indValue = { fontSize: '22px', fontWeight: '800', margin: '5px 0' };
-const indSub = { fontSize: '10px', color: '#94a3b8' };
-const projectInfoBar = { padding: '15px 25px', fontSize: '11px' };
-const projectTitleRow = { display: 'flex', alignItems: 'center', gap: '15px', marginTop: '5px', fontSize: '14px', background: '#1B3A6B', color: '#fff', padding: '10px', borderRadius: '4px' };
-const activeBadge = { background: '#10B981', padding: '2px 8px', borderRadius: '12px', fontSize: '10px' };
-const detailRow = { display: 'flex', justifyContent: 'space-between', marginBottom: '3px', borderBottom: '1px solid #edf2f7', paddingBottom: '2px' };
-const trackerLabel = { fontSize: '12px', fontWeight: 'bold', color: '#64748B' };
-const trackerPercentage = { fontSize: '12px', fontWeight: 'bold', color: '#3B82F6' };
-const progressBarBg = { width: '100%', height: '10px', backgroundColor: '#F1F5F9', borderRadius: '5px', overflow: 'hidden' };
-const progressBarFill = { height: '100%', backgroundColor: '#3B82F6', transition: 'width 0.4s ease-in-out' };
-const layoutContainer = { display: 'flex', height: '100vh', backgroundColor: '#f8fafc', overflow: 'hidden' };
-const sidebarStyle = { width: '250px', backgroundColor: '#1B3A6B', color: '#fff', padding: '25px', display: 'flex', flexDirection: 'column', flexShrink: 0 };
+// --- STYLES ---
+const layoutContainer = { display: 'flex', height: '100vh', backgroundColor: '#f8fafc', overflow: 'hidden', fontFamily: 'Inter, system-ui, sans-serif' };
+const sidebarStyle = { width: '260px', backgroundColor: '#0F172A', color: '#fff', padding: '25px', display: 'flex', flexDirection: 'column', flexShrink: 0, boxShadow: '4px 0 15px rgba(0,0,0,0.05)' };
 const logoSection = { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px' };
-const logoCircle = { width: '30px', height: '30px', background: '#3B82F6', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' };
-const logoText = { fontSize: '14px', fontWeight: '600' };
-const navGroup = { marginBottom: '30px' };
-const navLabel = { fontSize: '10px', color: '#94a3b8', marginBottom: '15px', fontWeight: 'bold' };
-const navItemActive = { padding: '12px', borderRadius: '6px', fontSize: '13px', backgroundColor: '#2563EB', cursor: 'pointer', color: '#fff' };
-const navItem = { padding: '12px', borderRadius: '6px', fontSize: '13px', color: '#cbd5e1' };
-const projectItem = { padding: '12px', cursor: 'pointer', borderRadius: '6px', marginBottom: '10px', color: '#cbd5e1' };
-const projectItemActive = { ...projectItem, backgroundColor: '#162e56', borderLeft: '4px solid #3B82F6', color: '#fff' };
-const subLabel = { fontSize: '10px', color: '#94a3b8' };
-const mainContent = { flex: 1, overflowY: 'auto' };
-const sectionTitle = { fontSize: '14px', color: '#1e293b', marginBottom: '15px', fontWeight: 'bold', borderLeft:'4px solid #1B3A6B', paddingLeft:'10px' };
-const sprintDivider = { background: '#E2E8F0', padding: '8px 15px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '15px' };
+const logoCircle = { width: '32px', height: '32px', background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', boxShadow: '0 4px 10px rgba(59,130,246,0.3)' };
+const logoText = { fontSize: '16px', fontWeight: '700', letterSpacing: '0.5px' };
+const sidebarScrollArea = { flex: 1, overflowY: 'auto' };
+const navGroup = { marginBottom: '35px' };
+const navLabel = { fontSize: '11px', color: '#64748B', marginBottom: '15px', fontWeight: '800', letterSpacing: '1px' };
+const navItemActive = { padding: '12px 15px', borderRadius: '8px', fontSize: '14px', backgroundColor: 'rgba(59,130,246,0.1)', borderLeft: '4px solid #3B82F6', color: '#60A5FA', fontWeight: '600' };
+const projectItem = { padding: '10px 15px', cursor: 'pointer', borderRadius: '8px', marginBottom: '5px', color: '#94A3B8', fontSize: '14px', transition: 'all 0.2s' };
+const projectItemActive = { ...projectItem, backgroundColor: 'rgba(255,255,255,0.05)', color: '#fff', fontWeight: '600' };
+const logoutBtnSide = { marginTop: '20px', background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', padding: '12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', ':hover': {background: '#ef4444', color: '#fff'} };
+
+const mainContent = { flex: 1, overflowY: 'auto', backgroundColor: '#F4F7FB' };
+const topHeaderStyle = { padding: '30px 25px', background: 'linear-gradient(to right, #fff, #F4F7FB)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' };
+const topTitleStyle = { fontSize: '24px', fontWeight: '800', color: '#0F172A', margin: '0 0 5px 0' };
+const userAvatarStyle = { width: '45px', height: '45px', background: 'linear-gradient(135deg, #10B981, #3B82F6)', color: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '18px', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' };
+
+const premiumCard = { background: '#fff', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid rgba(226,232,240,0.8)' };
+const sectionTitlePremium = { fontSize: '16px', color: '#1e293b', margin: '0 0 20px 0', fontWeight: '700' };
+
+const urgentTaskBox = { background: 'linear-gradient(to right, #fff, #f8fafc)', padding: '20px', borderRadius: '12px', borderLeft: '4px solid #EF4444', border: '1px solid #e2e8f0', borderLeftWidth: '4px' };
+const priorityTagHi = { background: '#FEF2F2', color: '#EF4444', padding: '4px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase' };
+const btnFocusStart = { background: '#0F172A', color: '#fff', padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: '600', fontSize: '12px', cursor: 'pointer', boxShadow: '0 4px 10px rgba(15,23,42,0.2)' };
+const emptyStateBox = { padding: '30px', textAlign: 'center', color: '#10B981', background: '#ECFDF5', borderRadius: '12px', fontWeight: '600' };
+
+const sprintHeader = { background: '#fff', padding: '15px 20px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' };
+const sprintBadge = (status) => ({ padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold', background: status === 'In Progress' ? '#DBEAFE' : '#F1F5F9', color: status === 'In Progress' ? '#1E40AF' : '#64748B' });
+const btnStartSprint = { background: '#10B981', color: '#fff', padding: '8px 16px', borderRadius: '8px', border: 'none', fontWeight: '700', fontSize: '12px', cursor: 'pointer', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' };
+
 const kanbanGrid = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' };
-const columnStyle = { background: '#f1f5f9', borderRadius: '10px', padding: '15px' };
-const colTitle = { fontSize: '11px', fontWeight: 'bold', color: '#64748B', textAlign: 'center', marginBottom: '15px' };
-const cardStyle = { background: '#fff', padding: '15px', borderRadius: '8px', marginBottom: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' };
-const tagStyle = { background: '#f1f5f9', padding: '3px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' };
-const detailBox = { background: '#F8FAFC', padding: '10px', borderRadius: '6px', margin: '12px 0', fontSize: '10px', color: '#475569' };
-const cardActions = { display: 'flex', gap: '5px', borderTop: '1px solid #f1f5f9', paddingTop: '10px' };
-const moveBtn = { flex: 1, padding: '6px', fontSize: '10px', cursor: 'pointer', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '4px' };
-const finishBtn = { ...moveBtn, background: '#10B981', color: '#fff', border: 'none' };
-const effortLogSection = { padding: '20px 25px 50px 25px' };
-const effortTable = { width: '100%', background: '#fff', borderRadius: '8px', borderCollapse: 'collapse' };
-const tableHeader = { background: '#1B3A6B', color: '#fff', textAlign: 'left', fontSize: '12px' };
-const tableRow = { borderBottom: '1px solid #f1f5f9', fontSize: '13px' };
-const tableInput = { width: '70px', padding: '5px', borderRadius: '4px', border: '1px solid #e2e8f0' };
-const statusBadge = { background: '#DBEAFE', color: '#1E40AF', padding: '2px 8px', borderRadius: '10px', fontSize: '11px' };
-const saveLogBtn = { marginTop: '15px', padding: '10px 20px', background: '#1B3A6B', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' };
-const logoutBtnSide = { marginTop: '20px', background: '#EF4444', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 };
+const columnStyle = { background: '#F8FAFC', borderRadius: '12px', padding: '15px', display: 'flex', flexDirection: 'column' };
+const colTitleGroup = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' };
+const colTitle = { fontSize: '13px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' };
+const colCount = { background: '#E2E8F0', color: '#475569', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' };
+const cardListStyle = { display: 'flex', flexDirection: 'column', gap: '12px' };
+
+const cardStylePremium = { background: '#fff', padding: '18px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #f1f5f9', cursor: 'pointer', transition: 'transform 0.2s, box-shadow 0.2s', ':hover': {transform: 'translateY(-2px)', boxShadow: '0 8px 15px rgba(0,0,0,0.08)'} };
+const tagStyle = (prio) => ({ background: prio?.toLowerCase() === 'high' ? '#FEF2F2' : '#F8FAFC', color: prio?.toLowerCase() === 'high' ? '#EF4444' : '#64748B', padding: '4px 10px', borderRadius: '6px', fontSize: '10px', fontWeight: '800' });
+const cardTitleStyleMain = { fontSize: '14px', color: '#0F172A', marginTop: '5px', display: 'block', lineHeight: '1.4' };
+
+const cardActions = { display: 'flex', gap: '8px', marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #f1f5f9' };
+const moveBtnPrimary = { flex: 1, padding: '8px', fontSize: '12px', cursor: 'pointer', background: '#3B82F6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600' };
+const finishBtn = { flex: 1, background: '#10B981', color: '#fff', border: 'none', padding: '8px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' };
+const btnFocusSmall = { padding: '8px', fontSize: '12px', cursor: 'pointer', background: '#FFF7ED', color: '#EA580C', border: '1px solid #FFEDD5', borderRadius: '6px', fontWeight: '600' };
+const moveBtnSecondary = { flex: 1, padding: '8px', fontSize: '11px', cursor: 'pointer', background: '#fff', color: '#64748B', border: '1px dashed #CBD5E1', borderRadius: '6px', fontWeight: '600' };
+
+const effortWidget = { background: '#fff', padding: '30px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid #e2e8f0' };
+const effortGrid = { display: 'flex', flexDirection: 'column', gap: '15px' };
+const effortRow = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #f1f5f9' };
+const badgeStatusOutline = (status) => ({ padding: '3px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '700', border: '1px solid #cbd5e1', color: '#64748b', display: 'inline-block', marginTop: '5px' });
+const inputWrapper = { position: 'relative', width: '90px' };
+const tableInputPremium = { width: '100%', padding: '10px 30px 10px 15px', borderRadius: '8px', border: '2px solid #e2e8f0', fontSize: '14px', fontWeight: '600', color: '#0F172A', outline: 'none', transition: 'border-color 0.2s' };
+const btnSaveLog = { padding: '12px 24px', background: 'linear-gradient(135deg, #1B3A6B, #2563EB)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(37,99,235,0.3)' };
+
+const focusOverlay = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15,23,42,0.85)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 };
+const focusCard = { background: '#fff', padding: '40px', borderRadius: '24px', width: '400px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' };
+const timerDisplay = { fontSize: '64px', fontWeight: '800', color: '#0F172A', margin: '30px 0', fontFamily: 'monospace' };
+const btnFocusPrimary = { flex: 1, padding: '15px', background: '#3B82F6', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '14px', cursor: 'pointer' };
+const btnFocusSecondary = { flex: 1, padding: '15px', background: '#f1f5f9', color: '#64748B', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '14px', cursor: 'pointer' };
 
 export default TMDashboard;
