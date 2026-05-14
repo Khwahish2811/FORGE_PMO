@@ -243,13 +243,16 @@ const TMDashboard = ({ user, onLogout }) => {
      urgentTask = activeTasks.sort((a, b) => new Date(a.due_date || '2099-01-01') - new Date(b.due_date || '2099-01-01'))[0];
   }
 
-  const utilization = stats.hours_today / (stats.daily_limit || 9);
+  const unsavedHours = Object.values(dailyInput).reduce((sum, h) => sum + (parseFloat(h) || 0), 0);
+  const effectiveHoursToday = (stats.hours_today || 0) + unsavedHours;
+
+  const utilization = effectiveHoursToday / (stats.daily_limit || 9);
   let wellnessStatus = 'Optimal';
   let wellnessColor = '#10B981';
   let wellnessMsg = "You're pacing perfectly for today.";
-  if (utilization < 0.3 && stats.hours_today !== 0) { wellnessStatus = 'Under-utilized'; wellnessColor = '#3B82F6'; wellnessMsg = "Capacity available for more tasks."; }
+  if (utilization < 0.3 && effectiveHoursToday !== 0) { wellnessStatus = 'Under-utilized'; wellnessColor = '#3B82F6'; wellnessMsg = "Capacity available for more tasks."; }
   else if (utilization > 0.8) { wellnessStatus = 'At Risk of Burnout'; wellnessColor = '#EF4444'; wellnessMsg = "Approaching daily limit. Time to wrap up!"; }
-  if (stats.hours_today === 0) { wellnessStatus = 'Fresh Start'; wellnessColor = '#8B5CF6'; wellnessMsg = "Ready to tackle the day!"; }
+  if (effectiveHoursToday === 0) { wellnessStatus = 'Fresh Start'; wellnessColor = '#8B5CF6'; wellnessMsg = "Ready to tackle the day!"; }
 
   // SVG Circular Progress logic
   const radius = 100;
@@ -413,7 +416,7 @@ const TMDashboard = ({ user, onLogout }) => {
               <div style={{display: 'flex', alignItems: 'center', gap: '20px', marginTop: '15px'}}>
                  <div style={{width: '100px', height: '100px', borderRadius: '50%', background: `conic-gradient(${wellnessColor} ${utilization * 100}%, #f1f5f9 0)`, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
                     <div style={{width: '75px', height: '75px', background: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column'}}>
-                       <span style={{fontSize: '20px', fontWeight: 'bold', color: '#1e293b'}}>{stats.hours_today}h</span>
+                       <span style={{fontSize: '20px', fontWeight: 'bold', color: '#1e293b'}}>{effectiveHoursToday % 1 === 0 ? effectiveHoursToday : effectiveHoursToday.toFixed(1)}h</span>
                     </div>
                  </div>
                  <div>
