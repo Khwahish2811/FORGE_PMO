@@ -557,9 +557,9 @@ const lastStatItem = {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
-                        <th style={{...miniTh, padding: '10px', textAlign: 'left'}}>Member</th>
-                        <th style={{...miniTh, padding: '10px', textAlign: 'left'}}>Role</th>
-                        <th style={{...miniTh, padding: '10px', textAlign: 'left'}}>FTE</th>
+                        <th style={{...miniThStyle, padding: '10px', textAlign: 'left'}}>Member</th>
+                        <th style={{...miniThStyle, padding: '10px', textAlign: 'left'}}>Role</th>
+                        <th style={{...miniThStyle, padding: '10px', textAlign: 'left'}}>FTE</th>
                         <th style={{width: '40px'}}></th>
                       </tr>
                     </thead>
