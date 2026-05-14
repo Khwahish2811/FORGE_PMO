@@ -139,7 +139,7 @@ const lastStatItem = {
     const interval = setInterval(() => {
         fetchData(true);
         fetchDashboardStats();
-    }, 5000); // Auto refresh every 5 seconds
+    }, 30000); // Auto refresh every 30 seconds
     return () => clearInterval(interval);
   }, [fetchData, fetchDashboardStats]);
 
@@ -197,10 +197,15 @@ const lastStatItem = {
     document.body.removeChild(a);
   };
 
+  const showToast = (msg, type = 'success') => {
+    setToastMessage({ msg, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
   const handleCreateTask = async (e) => {
     if (e) e.preventDefault();
     if (!taskData.title || !taskData.assigned_to || !taskData.sprint_id) {
-        alert("Please fill all required fields!");
+        showToast('⚠️ Please fill all required fields!', 'warning');
         return;
     }
     try {
@@ -218,13 +223,12 @@ const lastStatItem = {
         })
       });
       if (response.ok) {
-        setToastMessage(`✅ Task '${taskData.title}' assigned to ${taskData.assigned_to} successfully!`);
+        showToast(`✅ Task '${taskData.title}' assigned to ${taskData.assigned_to} successfully!`, 'success');
         setShowTaskModal(false);
         setTaskData({ title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' });
         fetchData();
-        setTimeout(() => setToastMessage(null), 4000);
       }
-    } catch (err) { alert("❌ Connection failed."); }
+    } catch (err) { showToast('❌ Connection failed. Check your server.', 'error'); }
   };
 
 
@@ -262,14 +266,40 @@ const lastStatItem = {
         body: JSON.stringify(payload)
       });
       if (response.ok) {
-        alert("Success! Project plan submitted.");
+        showToast('🚀 Project plan submitted successfully!', 'success');
         setShowProjectForm(false);
         setProjectData({ name: '', description: '', start_date: '', end_date: '', priority: 'Medium', team: [{ userId: '', fte: 1.0, role: 'Dev' }], sprints: [{ name: 'Sprint 1', start_date: '', end_date: '' }] });
         fetchData();
-        window.location.reload();
       }
-    } catch (err) { alert("Connection failed."); }
+    } catch (err) { showToast('❌ Connection failed. Check your server.', 'error'); }
   };
+
+  const getSmartInsights = () => {
+    let overloaded = [];
+    let available = [];
+    let atRiskProjects = [];
+    const userTaskCounts = {};
+
+    myProjects.forEach(project => {
+      if (project.total_tasks === 0 && (project.status === 'Active' || project.status === 'In Progress' || project.status === 'Approved')) {
+        atRiskProjects.push(project.name);
+      }
+      if (project.team_members) {
+        project.team_members.forEach(m => {
+          if (!userTaskCounts[m.username]) userTaskCounts[m.username] = 0;
+          userTaskCounts[m.username] += (m.task_count || 0);
+        });
+      }
+    });
+
+    Object.entries(userTaskCounts).forEach(([username, count]) => {
+      if (count === 0) available.push(username);
+      if (count > 5) overloaded.push(username);
+    });
+
+    return { overloaded, available, atRiskProjects };
+  };
+  const insights = getSmartInsights();
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f7fa', fontFamily: 'Segoe UI, sans-serif' }}>
@@ -280,11 +310,11 @@ const lastStatItem = {
           position: 'fixed',
           top: '30px',
           right: '30px',
-          background: '#10b981',
+          background: toastMessage.type === 'error' ? '#ef4444' : toastMessage.type === 'warning' ? '#f59e0b' : '#10b981',
           color: 'white',
           padding: '16px 24px',
           borderRadius: '10px',
-          boxShadow: '0 10px 25px -5px rgba(16, 185, 129, 0.4)',
+          boxShadow: toastMessage.type === 'error' ? '0 10px 25px -5px rgba(239,68,68,0.4)' : toastMessage.type === 'warning' ? '0 10px 25px -5px rgba(245,158,11,0.4)' : '0 10px 25px -5px rgba(16, 185, 129, 0.4)',
           zIndex: 9999,
           fontWeight: '600',
           fontSize: '14px',
@@ -293,7 +323,7 @@ const lastStatItem = {
           gap: '12px',
           animation: 'slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
         }}>
-          {toastMessage}
+          {toastMessage.msg}
         </div>
       )}
 
@@ -321,17 +351,92 @@ const lastStatItem = {
             <>
               {activeTab === 'execution' && (
                 <>
-                  <h3 style={sectionTitle}>Project Execution & Task Management</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#1B3A6B' }}>Project Execution & Task Management</h3>
+                  </div>
+
+                  {/* SMART INSIGHTS PANEL */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: '25px' }}>
+                    <div style={{ background: '#fff', borderRadius: '12px', padding: '15px', border: '1px solid #e2e8f0', borderLeft: '4px solid #10b981', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>🟢 Available Bandwidth</h4>
+                      <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1B3A6B' }}>
+                        {insights.available.length > 0 ? (
+                          <span>Ready for tasks: <span style={{ color: '#10b981' }}>{insights.available.join(', ')}</span></span>
+                        ) : <span style={{ color: '#64748b' }}>Everyone is currently assigned tasks.</span>}
+                      </div>
+                    </div>
+                    
+                    <div style={{ background: '#fff', borderRadius: '12px', padding: '15px', border: '1px solid #e2e8f0', borderLeft: '4px solid #ef4444', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>🔴 Overload Warning</h4>
+                      <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1B3A6B' }}>
+                        {insights.overloaded.length > 0 ? (
+                          <span>High workload detected: <span style={{ color: '#ef4444' }}>{insights.overloaded.join(', ')}</span></span>
+                        ) : <span style={{ color: '#64748b' }}>Team workload is perfectly balanced.</span>}
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#fff', borderRadius: '12px', padding: '15px', border: '1px solid #e2e8f0', borderLeft: '4px solid #f59e0b', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>⚠️ Project Health</h4>
+                      <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1B3A6B' }}>
+                        {insights.atRiskProjects.length > 0 ? (
+                          <span>0 Tasks in: <span style={{ color: '#f59e0b' }}>{insights.atRiskProjects.join(', ')}</span></span>
+                        ) : <span style={{ color: '#64748b' }}>All active projects have executing tasks.</span>}
+                      </div>
+                    </div>
+                  </div>
+
                   <div style={tableContainer}>
                     <table style={tableStyle}>
                       <thead style={theadStyle}>
-                        <tr><th style={thStyle}>PROJECT NAME</th><th style={thStyle}>STATUS</th><th style={thStyle}>TASK ACTION</th></tr>
+                        <tr><th style={thStyle}>PROJECT NAME</th><th style={thStyle}>TEAM WORKLOAD</th><th style={thStyle}>STATUS</th><th style={thStyle}>TASK ACTION</th></tr>
                       </thead>
                       <tbody>
                         {myProjects.map((project) => (
                           <React.Fragment key={project.id}>
                             <tr style={trStyle}>
                               <td style={tdStyle}><span onClick={() => toggleRow(project.id)} style={{ cursor: 'pointer', color: '#2563EB', textDecoration: 'underline' }}><b>{project.name}</b> {expandedProjectId === project.id ? '▴' : '▾'}</span></td>
+                              <td style={tdStyle}>
+                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                  {project.team_members && project.team_members.length > 0 ? (
+                                    project.team_members.map((m, idx) => {
+                                      const isOverloaded = (m.task_count || 0) > 5;
+                                      const nameParts = m.username.split('_');
+                                      const initials = nameParts.length > 1
+                                        ? (nameParts[0].charAt(0) + nameParts[1].charAt(0)).toUpperCase()
+                                        : m.username.substring(0, 2).toUpperCase();
+                                      const shortLabel = nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1, 5) + '-' + (idx + 1);
+                                      return (
+                                      <div key={idx} title={`${m.username}: ${m.task_count || 0} Task(s)`} style={{
+                                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px'
+                                      }}>
+                                        <div style={{
+                                          position: 'relative', width: '34px', height: '34px', borderRadius: '50%',
+                                          background: isOverloaded ? 'linear-gradient(135deg,#fee2e2,#fca5a5)' : 'linear-gradient(135deg,#e0e7ff,#c7d2fe)',
+                                          border: isOverloaded ? '2px solid #ef4444' : '2px solid #6366f1',
+                                          display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '10px', fontWeight: '800',
+                                          color: isOverloaded ? '#991b1b' : '#3730a3', boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                                        }}>
+                                          {initials}
+                                          <div style={{
+                                            position: 'absolute', top: '-5px', right: '-5px',
+                                            background: isOverloaded ? '#ef4444' : '#2563EB', color: '#fff',
+                                            fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%',
+                                            display: 'flex', justifyContent: 'center', alignItems: 'center',
+                                            border: '1.5px solid #fff', fontWeight: 'bold'
+                                          }}>
+                                            {m.task_count || 0}
+                                          </div>
+                                        </div>
+                                        <span style={{ fontSize: '9px', color: isOverloaded ? '#ef4444' : '#64748b', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                          {shortLabel}
+                                        </span>
+                                      </div>
+                                    )})
+                                  ) : (
+                                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>No Team</span>
+                                  )}
+                                </div>
+                              </td>
                              <td style={tdStyle}>
   <span style={{
     padding: '6px 14px',
@@ -367,7 +472,7 @@ const lastStatItem = {
                             </tr>
                             {expandedProjectId === project.id && (
                               <tr>
-                                <td colSpan="3" style={{ padding: '20px', backgroundColor: '#f8fafc' }}>
+                                <td colSpan="4" style={{ padding: '20px', backgroundColor: '#f8fafc' }}>
                                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                                     <div style={innerCardStyle}>
                                       <h5 style={innerTitleStyle}>👥 Project Team</h5>

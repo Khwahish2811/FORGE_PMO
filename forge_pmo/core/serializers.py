@@ -58,14 +58,18 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     team_members = serializers.SerializerMethodField()
     sprints = serializers.SerializerMethodField()
+    total_tasks = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
         fields = [
             'id', 'program', 'program_name', 'name', 'description',
             'start_date', 'end_date', 'priority', 'status', 'created_by', 'pm_name',
-            'team_members', 'sprints'
+            'team_members', 'sprints', 'total_tasks'
         ]
+
+    def get_total_tasks(self, obj):
+        return Task.objects.filter(project=obj).count()
 
     def get_team_members(self, obj):
         try:
