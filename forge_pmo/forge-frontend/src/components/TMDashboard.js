@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } from 'recharts';
+import { Gantt, ViewMode } from 'gantt-task-react';
+import "gantt-task-react/dist/index.css";
 
 const TMDashboard = ({ user, onLogout }) => {
   const [tasks, setTasks] = useState([]);
@@ -11,6 +14,7 @@ const TMDashboard = ({ user, onLogout }) => {
     due_this_week: 0,
     hours_today: 0,
     fte_score: 0,
+    assigned_fte: 0,
     total_programs: 0,
     daily_limit: 9
   });
@@ -25,6 +29,18 @@ const TMDashboard = ({ user, onLogout }) => {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [focusHistory, setFocusHistory] = useState({});
   const timerRef = useRef(null);
+
+  // --- NEW FEATURES STATES ---
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileData, setProfileData] = useState({
+      username: user,
+      email: '',
+      role: 'Team Member',
+      bio: '',
+      phone: ''
+  });
+
+  const [newProjectCount, setNewProjectCount] = useState(0);
 
   const showToast = (msg, type = 'success') => {
     setToastMessage({ msg, type });
@@ -64,9 +80,26 @@ const TMDashboard = ({ user, onLogout }) => {
         });
         const uniqueProjects = Object.values(projMap);
         setProjects(uniqueProjects);
+        
+        // --- NOTIFICATION LOGIC ---
+        const savedProjectCount = localStorage.getItem(`forge_projects_${user}`);
+        if (savedProjectCount !== null) {
+            const diff = uniqueProjects.length - parseInt(savedProjectCount, 10);
+            if (diff > 0) {
+                setNewProjectCount(diff);
+            }
+        }
+        localStorage.setItem(`forge_projects_${user}`, uniqueProjects.length);
       }
     } catch (err) { console.error("Fetch error:", err); }
     finally { setLoading(false); }
+  }, [user]);
+
+  const fetchUserProfile = useCallback(async () => {
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/get-user-profile/?username=${user}`);
+      if (res.ok) setProfileData(await res.json());
+    } catch (err) { console.error("Profile fetch error:", err); }
   }, [user]);
 
   useEffect(() => {
@@ -78,16 +111,35 @@ const TMDashboard = ({ user, onLogout }) => {
   useEffect(() => {
     if (user) {
         fetchTasks();
-        const interval = setInterval(() => { fetchTasks(); }, 30000);
-        return () => clearInterval(interval);
+        fetchDashboardStats();
+        fetchUserProfile();
+        const interval = setInterval(() => { 
+            fetchTasks();
+            fetchDashboardStats();
+        }, 5000);
+        const handleFocus = () => {
+            fetchTasks();
+            fetchDashboardStats();
+            fetchUserProfile();
+        };
+        window.addEventListener('focus', handleFocus);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('focus', handleFocus);
+        };
     }
-  }, [user, fetchTasks]);
+  }, [user, fetchTasks, fetchDashboardStats, fetchUserProfile]);
 
   useEffect(() => {
     if (user && selectedProjectId) {
         fetchDashboardStats();
-        const interval = setInterval(() => { fetchDashboardStats(); }, 30000);
-        return () => clearInterval(interval);
+        const interval = setInterval(() => { fetchDashboardStats(); }, 5000);
+        const handleFocus = () => fetchDashboardStats();
+        window.addEventListener('focus', handleFocus);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('focus', handleFocus);
+        };
     }
   }, [user, selectedProjectId, fetchDashboardStats]);
 
@@ -112,6 +164,10 @@ const TMDashboard = ({ user, onLogout }) => {
     }
     return () => clearInterval(timerRef.current);
   }, [isTimerRunning, timerLeft, focusPhase]);
+
+  const clearNotifications = () => {
+      setNewProjectCount(0);
+  };
 
   const toggleTimer = () => setIsTimerRunning(!isTimerRunning);
   
@@ -266,8 +322,70 @@ const TMDashboard = ({ user, onLogout }) => {
       return `${m}:${s}`;
   };
 
+  // --- CHART DATA CALCULATION ---
+  const sprintStatusData = [
+    { name: 'To Do', value: currentProjectTasks.filter(t => t.status === 'To Do').length, color: '#EF4444' },
+    { name: 'In Progress', value: currentProjectTasks.filter(t => t.status === 'In Progress').length, color: '#F59E0B' },
+    { name: 'Done', value: currentProjectTasks.filter(t => t.status === 'Done').length, color: '#10B981' }
+  ].filter(d => d.value > 0);
+
+  const priorityData = [
+    { name: 'High', count: currentProjectTasks.filter(t => t.priority === 'High' || t.priority === 'Urgent').length, fill: '#EF4444' },
+    { name: 'Medium', count: currentProjectTasks.filter(t => t.priority === 'Medium').length, fill: '#F59E0B' },
+    { name: 'Low', count: currentProjectTasks.filter(t => t.priority === 'Low').length, fill: '#3B82F6' }
+  ];
+
+  const ganttTasks = currentProjectTasks.map((t, idx) => ({
+      id: String(t.id || `task-${idx}`),
+      name: t.task_title || "Unnamed Task",
+      start: new Date(t.start_date || new Date(new Date(t.due_date || new Date()).getTime() - 3*24*60*60*1000)),
+      end: new Date(t.due_date || new Date().getTime() + 2*24*60*60*1000),
+      progress: t.status === 'Done' ? 100 : t.status === 'In Progress' ? 50 : 0,
+      type: 'task',
+      styles: { progressColor: '#3B82F6', progressSelectedColor: '#1E40AF' }
+  }));
+
   return (
     <div style={layoutContainer}>
+      {/* PROFILE MODAL */}
+      {showProfileModal && (
+        <div style={focusOverlay}>
+            <div style={{ ...focusCardPro, width: '450px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
+                    <h2 style={{ margin: 0, color: '#1B3A6B' }}>User Profile</h2>
+                    <button onClick={() => setShowProfileModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748B' }}>✕</button>
+                </div>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '25px' }}>
+                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, #10B981, #3B82F6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(16,185,129,0.4)' }}>
+                        {profileData.username?.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <h3 style={{ margin: '0 0 5px 0', fontSize: '20px', color: '#0F172A' }}>{profileData.username}</h3>
+                        <span style={{ background: '#EFF6FF', color: '#3B82F6', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '800' }}>{profileData.role}</span>
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Email Address</label>
+                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.email}</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Contact Number</label>
+                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.phone}</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Bio / About</label>
+                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px', lineHeight: '1.5' }}>{profileData.bio}</div>
+                    </div>
+                    <div style={{ marginTop: '10px', padding: '12px', background: '#FEF3C7', color: '#92400E', borderRadius: '8px', fontSize: '12px', border: '1px solid #FDE68A', textAlign: 'center' }}>
+                        ℹ️ Profile details are managed by HR/Admin and cannot be edited.
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
+
       {toastMessage && (
         <div style={{
           position: 'fixed', top: '30px', right: '30px', zIndex: 9999,
@@ -385,7 +503,38 @@ const TMDashboard = ({ user, onLogout }) => {
                <h2 style={topTitleStyle}>Hello, {user} 👋</h2>
                <p style={{margin: 0, fontSize: '13px', color: '#64748B'}}>Here is your personalized workspace.</p>
             </div>
-            <div style={userAvatarStyle}>{user?.charAt(0).toUpperCase()}</div>
+            <div style={{...userAvatarStyle, cursor: 'pointer'}} onClick={() => setShowProfileModal(true)} title="View Profile">
+                {user?.charAt(0).toUpperCase()}
+            </div>
+        </div>
+
+        {/* --- HEADER SUMMARY CARDS --- */}
+        <div style={{ display: 'flex', gap: '20px', padding: '0 25px', marginTop: '20px' }}>
+            <div style={headerCard}>
+                <h6 style={headerCardTitle}>Active Projects</h6>
+                <h3 style={{ margin: 0, fontWeight: 'bold', color: '#1B3A6B', fontSize: '24px' }}>{projects.length}</h3>
+            </div>
+            
+            <div style={{ ...headerCard, cursor: newProjectCount > 0 ? 'pointer' : 'default', borderLeft: newProjectCount > 0 ? '5px solid #10B981' : '5px solid #F59E0B' }} onClick={newProjectCount > 0 ? clearNotifications : null}>
+                <h6 style={headerCardTitle}>New Assignments</h6>
+                <h3 style={{ margin: 0, fontWeight: 'bold', color: newProjectCount > 0 ? '#10B981' : '#F59E0B', fontSize: '24px' }}>
+                    {newProjectCount > 0 ? `+${newProjectCount} New!` : '0'}
+                </h3>
+            </div>
+
+            <div style={headerCard}>
+                <h6 style={headerCardTitle}>Assigned FTE</h6>
+                <h3 style={{ margin: 0, fontWeight: 'bold', color: '#10B981', fontSize: '24px' }}>
+                    {stats.assigned_fte || '0.0'}
+                </h3>
+            </div>
+
+            <div style={headerCard}>
+                <h6 style={headerCardTitle}>Task Completion Rate</h6>
+                <h3 style={{ margin: 0, fontWeight: 'bold', color: '#3B82F6', fontSize: '24px' }}>
+                    {currentProjectTasks.length > 0 ? Math.round((currentProjectTasks.filter(t => t.status === 'Done').length / currentProjectTasks.length) * 100) : 0}%
+                </h3>
+            </div>
         </div>
 
         <div style={{display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '25px', padding: '25px'}}>
@@ -426,6 +575,66 @@ const TMDashboard = ({ user, onLogout }) => {
                  </div>
               </div>
            </div>
+        </div>
+
+        {/* ANALYTICS & TIMELINES */}
+        <div style={{ padding: '0 25px 25px 25px' }}>
+            <h3 style={sectionTitlePremium}>📊 Analytics & Execution Timelines</h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', marginBottom: '25px' }}>
+                <div style={premiumCard}>
+                    <h4 style={{ margin: '0 0 15px 0', fontSize: '14px', color: '#1B3A6B' }}>Sprint Status Breakdown</h4>
+                    <ResponsiveContainer width="100%" height={220}>
+                        <PieChart>
+                            <Pie data={sprintStatusData} innerRadius={60} outerRadius={80} dataKey="value" paddingAngle={5}>
+                                {sprintStatusData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                            </Pie>
+                            <Tooltip />
+                        </PieChart>
+                    </ResponsiveContainer>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '10px' }}>
+                        {sprintStatusData.map((entry, idx) => (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: 'bold', color: '#64748B' }}>
+                                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: entry.color }}></div>
+                                {entry.name} ({entry.value})
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div style={premiumCard}>
+                    <h4 style={{ margin: '0 0 15px 0', fontSize: '14px', color: '#1B3A6B' }}>Task Priority Distribution</h4>
+                    <ResponsiveContainer width="100%" height={220}>
+                        <BarChart data={priorityData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                            <XAxis type="number" tick={{fontSize: 10}} />
+                            <YAxis dataKey="name" type="category" tick={{fontSize: 10}} width={60} />
+                            <Tooltip cursor={{fill: 'transparent'}} />
+                            <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={25}>
+                                {priorityData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
+            <div style={premiumCard}>
+                <h4 style={{ margin: '0 0 15px 0', fontSize: '14px', color: '#1B3A6B' }}>Interactive Gantt Roadmap</h4>
+                {ganttTasks.length > 0 ? (
+                    <div style={{ overflowX: 'auto', paddingBottom: '10px' }}>
+                        <Gantt
+                            tasks={ganttTasks}
+                            viewMode={ViewMode.Day}
+                            columnWidth={60}
+                            listCellWidth="150px"
+                            rowHeight={40}
+                            barFill={70}
+                        />
+                    </div>
+                ) : (
+                    <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8', fontSize: '13px' }}>No timeline data available for this project.</div>
+                )}
+            </div>
         </div>
 
         {/* INTERACTIVE KANBAN */}
@@ -616,5 +825,8 @@ const btnDuration = { padding: '15px', background: '#f8fafc', border: '1px solid
 const btnFocusCancelSetup = { width: '100%', marginTop: '20px', padding: '12px', background: 'transparent', color: '#64748B', border: 'none', cursor: 'pointer', fontWeight: '600' };
 const btnFocusPrimary = { flex: 1, padding: '15px', background: '#3B82F6', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', boxShadow: '0 4px 10px rgba(59,130,246,0.3)' };
 const btnFocusSecondary = { flex: 1, padding: '15px', background: '#f1f5f9', color: '#64748B', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '14px', cursor: 'pointer' };
+
+const headerCard = { flex: 1, backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0', borderLeft: '5px solid #3B82F6' };
+const headerCardTitle = { color: '#64748B', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', marginTop: 0 };
 
 export default TMDashboard;

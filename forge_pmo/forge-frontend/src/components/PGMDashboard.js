@@ -35,6 +35,9 @@ const PGMDashboard = ({ username, onLogout }) => {
   const [showTrackerModal, setShowTrackerModal] = useState(false);
   const [selectedProgramStats, setSelectedProgramStats] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileData, setProfileData] = useState({ username: username, email: '', role: 'Program Manager', bio: '', phone: '' });
+
 
   const showToast = (msg, type = 'success') => {
     setToastMessage({ msg, type });
@@ -60,13 +63,27 @@ const PGMDashboard = ({ username, onLogout }) => {
     }
   }, []);
 
+  const fetchUserProfile = useCallback(async () => {
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/get-user-profile/?username=${username}`);
+      if (res.ok) setProfileData(await res.json());
+    } catch (err) { console.error("Profile fetch error:", err); }
+  }, [username]);
+
   useEffect(() => {
     fetchData();
+    fetchUserProfile();
     const interval = setInterval(() => {
         fetchData();
-    }, 30000); // Auto refresh every 30 seconds
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    }, 5000); // Auto refresh every 5 seconds
+    const handleFocus = () => { fetchData(); fetchUserProfile(); };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+        clearInterval(interval);
+        window.removeEventListener('focus', handleFocus);
+    };
+  }, [fetchData, fetchUserProfile]);
+
 
   // --- 2. Action Handlers (Original Functions Preserved) ---
   const handleAssignPM = async (programId) => {
@@ -186,6 +203,47 @@ const PGMDashboard = ({ username, onLogout }) => {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f7fa', fontFamily: 'Segoe UI' }}>
 
+      {/* PROFILE MODAL */}
+      {showProfileModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#fff', width: '450px', borderRadius: '24px', padding: '30px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.3)', position: 'relative' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
+                    <h2 style={{ margin: 0, color: '#1B3A6B' }}>User Profile</h2>
+                    <button onClick={() => setShowProfileModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748B' }}>✕</button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '25px' }}>
+                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, #1e40af, #3b82f6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold' }}>
+                        {profileData.username?.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <h3 style={{ margin: '0 0 5px 0', fontSize: '20px', color: '#0F172A' }}>{profileData.username}</h3>
+                        <span style={{ background: '#EFF6FF', color: '#3B82F6', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '800' }}>{profileData.role}</span>
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Email Address</label>
+                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.email}</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Contact Number</label>
+                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.phone}</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Bio / About</label>
+                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px', lineHeight: '1.5' }}>{profileData.bio}</div>
+                    </div>
+                    <div style={{ marginTop: '10px', padding: '12px', background: '#FEF3C7', color: '#92400E', borderRadius: '8px', fontSize: '12px', border: '1px solid #FDE68A', textAlign: 'center' }}>
+                        ℹ️ Profile details are managed by HR/Admin and cannot be edited.
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
+
+
       {/* TOAST NOTIFICATION */}
       {toastMessage && (
         <div style={{
@@ -225,12 +283,13 @@ const PGMDashboard = ({ username, onLogout }) => {
           <span style={{ fontWeight: 700, color: '#1B3A6B' }}>
               {activeTab === 'dashboard' ? 'Program Manager Dashboard' : 'Working Programs Control'}
           </span>
-          <div style={{display:'flex', alignItems:'center', gap:'15px'}}>
+          <div style={{display:'flex', alignItems:'center', gap:'15px', cursor: 'pointer'}} onClick={() => setShowProfileModal(true)}>
             <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
-            <div style={userCircle}>{username?.charAt(0).toUpperCase() || 'U'}</div>
+            <div style={{ width: '35px', height: '35px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', background: 'linear-gradient(135deg, #1e40af, #3b82f6)', color: '#fff', fontWeight: 'bold' }}>{username?.charAt(0).toUpperCase() || 'U'}</div>
             <button onClick={onLogout} style={logoutBtnStyle}>LOGOUT</button>
           </div>
         </div>
+
 
         {/* --- DYNAMIC CONTENT --- */}
         {activeTab === 'dashboard' ? (
@@ -309,7 +368,7 @@ const PGMDashboard = ({ username, onLogout }) => {
                           <td style={tdStyle}><span style={statusBadge(pgm.status)}>{pgm.status}</span></td>
                           <td style={tdStyle}><b>{pgm.project_manager_assigned_name || 'Not Assigned'}</b></td>
                           <td style={tdStyle}>
-                            {pgm.status === 'Approved' ? (
+                            {(pgm.status === 'Approved' || pgm.status === 'In Progress') ? (
                               <div style={{ display: 'flex', gap: '5px' }}>
                                 <select style={miniSelect} onChange={(e) => setSelectedPMs({ ...selectedPMs, [pgm.id]: e.target.value })}>
                                   <option value="">Select PM</option>
@@ -342,9 +401,9 @@ const PGMDashboard = ({ username, onLogout }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {programs.filter(p => p.status === 'Approved' && p.project_manager_assigned_name).length > 0 ? (
+                    {programs.filter(p => (p.status === 'Approved' || p.status === 'In Progress') && p.project_manager_assigned_name).length > 0 ? (
                       programs
-                        .filter(p => p.status === 'Approved' && p.project_manager_assigned_name)
+                        .filter(p => (p.status === 'Approved' || p.status === 'In Progress') && p.project_manager_assigned_name)
                         .map(pgm => (
                         <tr key={pgm.id} style={trStyle}>
                           <td style={tdStyle}>
@@ -353,7 +412,7 @@ const PGMDashboard = ({ username, onLogout }) => {
                           </td>
                           <td style={tdStyle}>
                              <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
-                               <div style={{...userCircle, width:'25px', height:'25px', fontSize:'10px'}}>{pgm.project_manager_assigned_name.charAt(0)}</div>
+                               <div style={{ width: '25px', height: '25px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', color: '#fff', fontWeight: 'bold', fontSize: '10px' }}>{pgm.project_manager_assigned_name.charAt(0)}</div>
                                {pgm.project_manager_assigned_name}
                              </div>
                           </td>
@@ -668,7 +727,6 @@ const logoBox = { padding: '25px', color: '#fff', fontSize: '24px', fontWeight: 
 const sbSecTitle = { fontSize: '10px', color: '#8ab0d8', textTransform: 'uppercase', padding: '25px 20px 8px' };
 const sbItem = { padding: '12px 20px', color: '#ccdaee', cursor: 'pointer', fontSize: '13px', transition: '0.3s' };
 const headerStyle = { height: '65px', background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 25px' };
-const userCircle = { width: '35px', height: '35px', borderRadius: '50%', backgroundColor: '#2563EB', color: '#fff', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold' };
 const cardGrid = { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', padding: '25px' };
 const summCard = { background: '#fff', padding: '20px', borderRadius: '10px', border: '1px solid #e2e8f0' };
 const sectionTitle = { margin: 0, color: '#1B3A6B', fontSize: '14px', fontWeight: '800' };

@@ -11,7 +11,7 @@ from django.db import transaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import Program, Project, Task, Sprint, TeamMember, DailyEffortLog
+from .models import Program, Project, Task, Sprint, TeamMember, DailyEffortLog, Profile, Notification
 from .serializers import ProjectSerializer, ProgramSerializer, TaskSerializer
 # pyrefly: ignore [untyped-import]
 from django.http import JsonResponse
@@ -624,6 +624,16 @@ def get_dashboard_stats(request):
             # pyrefly: ignore [bad-typed-dict-key]
             stats_data["fte_score"] = round(float(total_month_hours) / 160, 2)
 
+            # --- ASSIGNED FTE LOGIC (TeamMember table) ---
+            # Sum of FTE scores across all active projects
+            # pyrefly: ignore [missing-attribute]
+            assigned_fte = TeamMember.objects.filter(
+                user__username=username,
+                project__status__in=['Approved', 'Active', 'In Progress']
+            ).aggregate(Sum('fte_score'))['fte_score__sum'] or 0.0
+            
+            stats_data["assigned_fte"] = round(float(assigned_fte), 2)
+
         return Response(stats_data, status=200)
 
     except Exception as e:
@@ -895,13 +905,135 @@ def update_sprint_status(request):
                     project.status = 'In Progress'
                     project.save()
                 
-                program = project.program
-                if program.status != 'In Progress':
-                    program.status = 'In Progress'
-                    program.save()
+                # Keep program status as is to avoid breaking PGM dashboard logic
+                
+                # Notify Project Manager
+                pm_user = project.created_by
+                if pm_user:
+                    Notification.objects.create(
+                        user=pm_user,
+                        message=f"🚀 Sprint '{sprint.name}' has been started by a Team Member for project '{project.name}'."
+                    )
                     
             return Response({"success": True, "message": f"Sprint status updated to {new_status}"})
     except Sprint.DoesNotExist:
         return Response({"error": "Sprint not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+@api_view(['GET'])
+def get_user_profile(request):
+    username = request.query_params.get('username')
+    if not username:
+        return Response({"error": "Username required"}, status=400)
+    try:
+        user = User.objects.get(username=username)
+        profile, created = Profile.objects.get_or_create(user=user)
+        return Response({
+            "username": user.username,
+            "email": user.email,
+            "role": profile.get_role_display(),
+            "bio": profile.bio or "No bio available.",
+            "phone": profile.phone or "Not provided"
+        })
+    except User.DoesNotExist:
+        return Response({"error": "User not found"}, status=404)
+
+@api_view(['GET'])
+def get_notifications(request):
+    username = request.query_params.get('username')
+    if not username:
+        return Response([], status=200)
+    try:
+        notifications = Notification.objects.filter(user__username=username, is_read=False).order_by('-created_at')
+        data = [{
+            "id": n.id,
+            "message": n.message,
+            "created_at": n.created_at.strftime("%Y-%m-%d %H:%M")
+        } for n in notifications]
+        return Response(data)
+    except Exception as e:
+        return Response([], status=200)
+
+@api_view(['POST'])
+def mark_notifications_read(request):
+    username = request.data.get('username')
+    if not username:
+        return Response({"success": False})
+    try:
+        Notification.objects.filter(user__username=username, is_read=False).update(is_read=True)
+        return Response({"success": True})
+    except Exception as e:
+        return Response({"success": False, "error": str(e)})
+@api_view(['GET'])
+def get_team_performance(request):
+    manager_username = request.query_params.get('username')
+    if not manager_username:
+        return Response({"error": "Manager username required"}, status=400)
+    
+    try:
+        # Get all projects managed by this PM
+        # pyrefly: ignore [missing-attribute]
+        projects = Project.objects.filter(created_by__username=manager_username)
+        project_ids = projects.values_list('id', flat=True)
+        
+        # Get all team members assigned to these projects
+        # pyrefly: ignore [missing-attribute]
+        team_assignments = TeamMember.objects.filter(project_id__in=project_ids).select_related('user', 'project')
+        
+        member_stats = {}
+        
+        for assign in team_assignments:
+            u = assign.user
+            if u.username not in member_stats:
+                member_stats[u.username] = {
+                    "username": u.username,
+                    "full_name": f"{u.first_name} {u.last_name}" if u.first_name else u.username,
+                    "total_projects": 0,
+                    "total_fte": 0.0,
+                    "total_tasks": 0,
+                    "completed_tasks": 0,
+                    "recent_tasks": []
+                }
+            
+            stats = member_stats[u.username]
+            stats["total_projects"] += 1
+            stats["total_fte"] += assign.fte_score
+            
+            # Get tasks for this user in projects managed by this PM
+            # pyrefly: ignore [missing-attribute]
+            tasks = Task.objects.filter(assigned_to=u, project_id__in=project_ids)
+            stats["total_tasks"] += tasks.count()
+            stats["completed_tasks"] += tasks.filter(status__iexact='Done').count()
+            
+            # Get 3 most recent tasks
+            recent = tasks.order_by('-due_date')[:3]
+            for t in recent:
+                stats["recent_tasks"].append({
+                    "title": t.title,
+                    "project": t.project.name,
+                    "status": t.status,
+                    "due_date": str(t.due_date)
+                })
+
+        # Calculate final metrics
+        performance_data = []
+        for username, data in member_stats.items():
+            completion_rate = (data["completed_tasks"] / data["total_tasks"] * 100) if data["total_tasks"] > 0 else 0
+            # Simple score logic: weighted average of completion rate and fte (normalized)
+            # A good member has high completion rate and balanced FTE usage
+            score = (completion_rate * 0.7) + (min(data["total_fte"], 2.0) * 15) # Cap FTE bonus at 30 points
+            
+            performance_data.append({
+                **data,
+                "completion_rate": round(completion_rate, 1),
+                "performance_score": round(score, 1)
+            })
+            
+        # Sort by performance score
+        performance_data.sort(key=lambda x: x["performance_score"], reverse=True)
+        
+        return Response(performance_data)
+        
     except Exception as e:
         return Response({"error": str(e)}, status=500)

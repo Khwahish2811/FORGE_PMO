@@ -40,4 +40,8 @@ path('get-working-programs/', views.get_working_programs, name='get_working_prog
 path('update-task-status-with-tracker/', views.update_task_status, name='update-task-status'),
 path('pm-dashboard-stats/', views.get_pm_dashboard_stats, name='pm-stats'),
 path('update-sprint-status/', views.update_sprint_status, name='update_sprint_status'),
+    path('get-user-profile/', views.get_user_profile, name='get_user_profile'),
+    path('get-notifications/', views.get_notifications, name='get_notifications'),
+    path('mark-notifications-read/', views.mark_notifications_read, name='mark_notifications_read'),
+    path('get-team-performance/', views.get_team_performance, name='get_team_performance'),
 ]

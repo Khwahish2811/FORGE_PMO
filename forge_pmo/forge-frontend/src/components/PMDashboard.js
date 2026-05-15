@@ -43,6 +43,17 @@ const PMDashboard = ({ username, onLogout }) => {
     title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: ''
   });
 
+  // --- NEW FEATURES STATES ---
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileData, setProfileData] = useState({
+      username: username, email: '', role: 'Project Manager', bio: '', phone: ''
+  });
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [teamPerformance, setTeamPerformance] = useState([]);
+  const [selectedMemberDetail, setSelectedMemberDetail] = useState(null);
+
+
   // PROJECT FORM STATE
   const [projectData, setProjectData] = useState({
     name: '',
@@ -54,6 +65,17 @@ const PMDashboard = ({ username, onLogout }) => {
     sprints: [{ name: 'Sprint 1', start_date: '', end_date: '' }],
   });
 
+  const [stats, setStats] = useState({
+    active_tasks: 0,
+    due_this_week: 0,
+    hours_today: 0,
+    fte_score: 0,
+    total_assigned: 0,
+    pending_plans: 0,
+    avg_completion: 0
+  });
+
+  // --- ALL FETCH FUNCTIONS MOVED TO TOP ---
   const fetchData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
@@ -84,17 +106,6 @@ const PMDashboard = ({ username, onLogout }) => {
     }
   }, [username]);
 
-  // --- ADD THIS NEW FUNCTION HERE ---
-  const [stats, setStats] = useState({
-    active_tasks: 0,
-    due_this_week: 0,
-    hours_today: 0,
-    fte_score: 0,
-    total_assigned: 0,   // Naya
-    pending_plans: 0,    // Naya
-    avg_completion: 0
-  });
-
   const fetchDashboardStats = useCallback(async () => {
     try {
       const response = await fetch(`http://127.0.0.1:8000/api/pm-dashboard-stats/?username=${username}`);
@@ -106,42 +117,92 @@ const PMDashboard = ({ username, onLogout }) => {
       console.error("Stats fetch error:", err);
     }
   }, [username]);
-  // -----------------------------------
+
+  const fetchUserProfile = useCallback(async () => {
+      try {
+          const res = await fetch(`http://127.0.0.1:8000/api/get-user-profile/?username=${username}`);
+          if (res.ok) setProfileData(await res.json());
+      } catch (err) { console.error("Profile fetch error:", err); }
+  }, [username]);
+
+  const fetchNotifications = useCallback(async () => {
+      try {
+          const res = await fetch(`http://127.0.0.1:8000/api/get-notifications/?username=${username}`);
+          if (res.ok) setNotifications(await res.json());
+      } catch (err) { console.error("Notification fetch error:", err); }
+  }, [username]);
+
+  const fetchTeamPerformance = useCallback(async () => {
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/get-team-performance/?username=${username}`);
+      if (res.ok) setTeamPerformance(await res.json());
+    } catch (err) { console.error("Performance fetch error:", err); }
+  }, [username]);
+
+  const markRead = async () => {
+      try {
+          await fetch('http://127.0.0.1:8000/api/mark-notifications-read/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username })
+          });
+          setNotifications([]);
+      } catch (err) { console.error("Mark read error:", err); }
+  };
 
   const industryHeader = {
     display: 'flex',
     background: '#fff',
-    borderBottom: '1px solid #e2e8f0', // Thoda light border
+    borderBottom: '1px solid #e2e8f0',
     padding: '20px 0',
     marginBottom: '20px',
     width: '100%',
-    justifyContent: 'space-around' // Items ko barabar distribute karne ke liye
+    justifyContent: 'space-around'
 };
 
 const industryStatItem = {
     flex: 1,
-    padding: '0 40px', // Side padding badha di
-    borderRight: '1px solid #f1f5f9', // Divider lines
+    padding: '0 40px',
+    borderRight: '1px solid #f1f5f9',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center'
 };
 
-// Last item se border hatane ke liye is style ka use karein
 const lastStatItem = {
     ...industryStatItem,
     borderRight: 'none'
 };
 
+
+
   useEffect(() => {
     fetchData();
     fetchDashboardStats();
+    fetchNotifications();
+    fetchUserProfile();
+    fetchTeamPerformance();
     const interval = setInterval(() => {
         fetchData(true);
         fetchDashboardStats();
-    }, 30000); // Auto refresh every 30 seconds
-    return () => clearInterval(interval);
-  }, [fetchData, fetchDashboardStats]);
+        fetchNotifications();
+        fetchTeamPerformance();
+    }, 5000); // Auto refresh every 5 seconds
+    const handleFocus = () => {
+        fetchData(true);
+        fetchDashboardStats();
+        fetchNotifications();
+        fetchUserProfile();
+        fetchTeamPerformance();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+        clearInterval(interval);
+        window.removeEventListener('focus', handleFocus);
+    };
+  }, [fetchData, fetchDashboardStats, fetchNotifications, fetchUserProfile, fetchTeamPerformance]);
+
+
 
   const toggleRow = (id) => {
     setExpandedProjectId(expandedProjectId === id ? null : id);
@@ -304,6 +365,47 @@ const lastStatItem = {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f7fa', fontFamily: 'Segoe UI, sans-serif' }}>
       
+      {/* PROFILE MODAL */}
+      {showProfileModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#fff', width: '450px', borderRadius: '24px', padding: '30px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.3)', position: 'relative', animation: 'modalSlideUp 0.4s ease-out' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
+                    <h2 style={{ margin: 0, color: '#1B3A6B' }}>User Profile</h2>
+                    <button onClick={() => setShowProfileModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748B' }}>✕</button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '25px' }}>
+                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, #1B3A6B, #3B82F6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(27,58,107,0.4)' }}>
+                        {profileData.username?.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <h3 style={{ margin: '0 0 5px 0', fontSize: '20px', color: '#0F172A' }}>{profileData.username}</h3>
+                        <span style={{ background: '#EFF6FF', color: '#3B82F6', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '800' }}>{profileData.role}</span>
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Email Address</label>
+                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.email}</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Contact Number</label>
+                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.phone}</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Bio / About</label>
+                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px', lineHeight: '1.5' }}>{profileData.bio}</div>
+                    </div>
+                    <div style={{ marginTop: '10px', padding: '12px', background: '#FEF3C7', color: '#92400E', borderRadius: '8px', fontSize: '12px', border: '1px solid #FDE68A', textAlign: 'center' }}>
+                        ℹ️ Profile details are managed by HR/Admin and cannot be edited.
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
+
+      
       {/* TOAST NOTIFICATION */}
       {toastMessage && (
         <div style={{
@@ -334,21 +436,129 @@ const lastStatItem = {
         <div style={{ ...sbItem, backgroundColor: activeTab === 'assignments' ? '#2563EB' : 'transparent', color: '#fff' }} onClick={() => { setActiveTab('assignments'); setShowProjectForm(false); }}>My Assignments</div>
         <div style={{ ...sbItem, backgroundColor: activeTab === 'execution' ? '#2563EB' : 'transparent', color: '#fff' }} onClick={() => { setActiveTab('execution'); setShowProjectForm(false); }}>Project Execution</div>
         <div style={{ ...sbItem, backgroundColor: activeTab === 'working_programs' ? '#2563EB' : 'transparent', color: '#fff' }} onClick={() => { setActiveTab('working_programs'); setShowProjectForm(false); }}>Working Programs</div>
+        <div style={{ ...sbItem, backgroundColor: activeTab === 'performance' ? '#2563EB' : 'transparent', color: '#fff' }} onClick={() => { setActiveTab('performance'); setShowProjectForm(false); }}>🏆 Team Performance</div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', marginLeft: '220px' }}>
         {/* HEADER */}
         <div style={headerStyle}>
           <span style={{ fontWeight: 700, color: '#1B3A6B' }}>Project Manager Dashboard</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
-            <div style={userCircleStyle}>{username?.charAt(0).toUpperCase() || 'U'}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            
+            {/* NOTIFICATION BELL */}
+            <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => { setShowNotifications(!showNotifications); if (!showNotifications) markRead(); }}>
+                <span style={{ fontSize: '22px' }}>🔔</span>
+                {notifications.length > 0 && (
+                    <span style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#ef4444', color: '#fff', fontSize: '10px', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', border: '2px solid #fff' }}>
+                        {notifications.length}
+                    </span>
+                )}
+                
+                {/* NOTIFICATION DROPDOWN */}
+                {showNotifications && (
+                    <div style={{ position: 'absolute', top: '40px', right: '0', width: '300px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', zIndex: 1000, overflow: 'hidden' }}>
+                        <div style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', fontWeight: 'bold', color: '#1B3A6B', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Notifications</span>
+                            <span onClick={(e) => { e.stopPropagation(); setShowNotifications(false); }} style={{ cursor: 'pointer' }}>✕</span>
+                        </div>
+                        <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                            {notifications.length > 0 ? notifications.map(n => (
+                                <div key={n.id} style={{ padding: '12px 15px', borderBottom: '1px solid #f8fafc', fontSize: '12px', color: '#475569' }}>
+                                    <div>{n.message}</div>
+                                    <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>{n.created_at}</div>
+                                </div>
+                            )) : <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>No new notifications</div>}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} onClick={() => setShowProfileModal(true)}>
+                <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
+                <div style={{ ...userCircleStyle, background: 'linear-gradient(135deg, #1B3A6B, #3B82F6)', color: '#fff', fontWeight: 'bold' }}>
+                    {username?.charAt(0).toUpperCase() || 'U'}
+                </div>
+            </div>
             <button onClick={onLogout} style={logoutBtnStyle}>LOGOUT</button>
           </div>
         </div>
 
+
         <div style={{ padding: '25px', overflowY: 'auto' }}>
             <>
+              {activeTab === 'performance' && (
+                <div style={{ padding: '20px' }}>
+                  <h3 style={sectionTitle}>🏆 Team Performance Leaderboard</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '30px' }}>
+                    {teamPerformance.slice(0, 3).map((member, idx) => (
+                      <div key={idx} style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', padding: '20px', borderRadius: '15px', color: '#fff', position: 'relative', overflow: 'hidden' }}>
+                          <div style={{ position: 'absolute', top: '-10px', right: '-10px', fontSize: '60px', opacity: '0.1' }}>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}</div>
+                          <div style={{ fontSize: '11px', fontWeight: '800', opacity: '0.8', textTransform: 'uppercase' }}>Rank #{idx + 1} Performer</div>
+                          <h3 style={{ margin: '10px 0 5px 0', fontSize: '18px' }}>{member.full_name}</h3>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
+                             <div>
+                                <div style={{ fontSize: '10px', opacity: '0.8' }}>SCORE</div>
+                                <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{member.performance_score}</div>
+                             </div>
+                             <div>
+                                <div style={{ fontSize: '10px', opacity: '0.8' }}>COMPLETION</div>
+                                <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{member.completion_rate}%</div>
+                             </div>
+                          </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={tableContainer}>
+                    <table style={tableStyle}>
+                      <thead style={theadStyle}>
+                         <tr>
+                            <th style={thStyle}>TEAM MEMBER</th>
+                            <th style={thStyle}>PROJECTS</th>
+                            <th style={thStyle}>TOTAL FTE</th>
+                            <th style={thStyle}>TASK RATIO</th>
+                            <th style={thStyle}>SCORE</th>
+                            <th style={thStyle}>ACTION</th>
+                         </tr>
+                      </thead>
+                      <tbody>
+                         {teamPerformance.map((member, i) => (
+                           <tr key={i} style={trStyle}>
+                              <td style={tdStyle}>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <div style={{ width: '35px', height: '35px', borderRadius: '50%', background: '#F1F5F9', color: '#1E40AF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{member.username.charAt(0).toUpperCase()}</div>
+                                    <div>
+                                       <div style={{ fontWeight: 'bold', color: '#1B3A6B' }}>{member.username}</div>
+                                       <div style={{ fontSize: '11px', color: '#64748B' }}>{member.full_name}</div>
+                                    </div>
+                                 </div>
+                              </td>
+                              <td style={tdStyle}>{member.total_projects}</td>
+                              <td style={tdStyle}>
+                                 <span style={{ color: member.total_fte > 1.5 ? '#EF4444' : '#10B981', fontWeight: 'bold' }}>{member.total_fte.toFixed(1)}</span>
+                              </td>
+                              <td style={tdStyle}>
+                                 <div style={{ fontSize: '12px' }}>{member.completed_tasks}/{member.total_tasks} Tasks</div>
+                                 <div style={{ width: '100px', height: '4px', background: '#F1F5F9', borderRadius: '2px', marginTop: '4px' }}>
+                                    <div style={{ width: `${member.completion_rate}%`, height: '100%', background: member.completion_rate > 80 ? '#10B981' : '#F59E0B', borderRadius: '2px' }}></div>
+                                 </div>
+                              </td>
+                              <td style={tdStyle}>
+                                 <span style={{ background: '#EEF2FF', color: '#4F46E5', padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800' }}>
+                                    {member.performance_score}
+                                 </span>
+                              </td>
+                              <td style={tdStyle}>
+                                 <button onClick={() => setSelectedMemberDetail(member)} style={{ ...primBtn, padding: '6px 12px', fontSize: '11px' }}>View Details</button>
+                              </td>
+                           </tr>
+                         ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {activeTab === 'execution' && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -996,6 +1206,54 @@ const lastStatItem = {
         .activity-card { transition: all 0.2s ease; border: 1px solid transparent; }
         .activity-card:hover { border-color: #e0e7ff; background: #fff !important; transform: scale(1.01); }
       `}</style>
+      {/* MEMBER DETAIL MODAL */}
+      {selectedMemberDetail && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#fff', width: '600px', borderRadius: '24px', padding: '30px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', position: 'relative' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h2 style={{ margin: 0, color: '#1B3A6B' }}>Member Performance: {selectedMemberDetail.username}</h2>
+                    <button onClick={() => setSelectedMemberDetail(null)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✕</button>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: '25px' }}>
+                   <div style={{ background: '#F8FAF6', padding: '15px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                      <div style={{ fontSize: '10px', color: '#64748B', textTransform: 'uppercase' }}>Efficiency</div>
+                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10B981' }}>{selectedMemberDetail.completion_rate}%</div>
+                   </div>
+                   <div style={{ background: '#F8FAFC', padding: '15px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                      <div style={{ fontSize: '10px', color: '#64748B', textTransform: 'uppercase' }}>Projects</div>
+                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#3B82F6' }}>{selectedMemberDetail.total_projects}</div>
+                   </div>
+                   <div style={{ background: '#FFF7ED', padding: '15px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                      <div style={{ fontSize: '10px', color: '#64748B', textTransform: 'uppercase' }}>Workload (FTE)</div>
+                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#F59E0B' }}>{selectedMemberDetail.total_fte.toFixed(1)}</div>
+                   </div>
+                </div>
+
+                <h4 style={{ fontSize: '14px', color: '#1B3A6B', marginBottom: '15px' }}>Recent Task Execution</h4>
+                <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid #F1F5F9', borderRadius: '12px' }}>
+                   {selectedMemberDetail.recent_tasks.length > 0 ? (
+                     selectedMemberDetail.recent_tasks.map((t, idx) => (
+                       <div key={idx} style={{ padding: '15px', borderBottom: idx !== selectedMemberDetail.recent_tasks.length - 1 ? '1px solid #F1F5F9' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                             <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{t.title}</div>
+                             <div style={{ fontSize: '11px', color: '#64748B' }}>{t.project} • Due: {t.due_date}</div>
+                          </div>
+                          <span style={{ 
+                            padding: '4px 10px', 
+                            borderRadius: '12px', 
+                            fontSize: '10px', 
+                            fontWeight: 'bold',
+                            background: t.status === 'Done' ? '#DCFCE7' : '#FEF3C7',
+                            color: t.status === 'Done' ? '#166534' : '#92400E'
+                          }}>{t.status}</span>
+                       </div>
+                     ))
+                   ) : <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8' }}>No recent tasks found.</div>}
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 };

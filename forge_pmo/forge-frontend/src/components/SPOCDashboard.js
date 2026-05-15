@@ -14,6 +14,9 @@ const SPOCDashboard = ({ username, onLogout }) => {
   const [selectedProgramStats, setSelectedProgramStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileData, setProfileData] = useState({ username: username, email: '', role: 'Business SPOC', bio: '', phone: '' });
+
 
   const showToast = (msg, type = 'success') => {
     setToastMessage({ msg, type });
@@ -29,12 +32,12 @@ const SPOCDashboard = ({ username, onLogout }) => {
         setAllPrograms(data);
 
         if (activeTab === 'reports') {
-            setDisplayPrograms(data.filter(p => p.status?.toLowerCase() === 'approved'));
+            setDisplayPrograms(data.filter(p => p.status?.toLowerCase() === 'approved' || p.status?.toLowerCase() === 'in progress'));
         } else {
             const filtered = data.filter(p =>
               activeTab === 'pending'
                 ? p.status?.toLowerCase() === 'pending'
-                : (p.status?.toLowerCase() === 'approved' || p.status?.toLowerCase() === 'rejected')
+                : (p.status?.toLowerCase() === 'approved' || p.status?.toLowerCase() === 'in progress' || p.status?.toLowerCase() === 'rejected')
             );
             setDisplayPrograms(filtered);
         }
@@ -46,13 +49,27 @@ const SPOCDashboard = ({ username, onLogout }) => {
     }
   }, [activeTab]);
 
+  const fetchUserProfile = useCallback(async () => {
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/get-user-profile/?username=${username}`);
+      if (res.ok) setProfileData(await res.json());
+    } catch (err) { console.error("Profile fetch error:", err); }
+  }, [username]);
+
   useEffect(() => {
     fetchData();
+    fetchUserProfile();
     const interval = setInterval(() => {
         fetchData(true);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    }, 5000);
+    const handleFocus = () => { fetchData(true); fetchUserProfile(); };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+        clearInterval(interval);
+        window.removeEventListener('focus', handleFocus);
+    };
+  }, [fetchData, fetchUserProfile]);
+
 
   const handleAction = async (programId, newStatus) => {
     try {
@@ -143,7 +160,48 @@ const SPOCDashboard = ({ username, onLogout }) => {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f5f0' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f7fa', fontFamily: 'Segoe UI' }}>
+
+      {/* PROFILE MODAL */}
+      {showProfileModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#fff', width: '450px', borderRadius: '24px', padding: '30px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.3)', position: 'relative' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
+                    <h2 style={{ margin: 0, color: '#1B3A6B' }}>User Profile</h2>
+                    <button onClick={() => setShowProfileModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748B' }}>✕</button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '25px' }}>
+                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold' }}>
+                        {profileData.username?.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <h3 style={{ margin: '0 0 5px 0', fontSize: '20px', color: '#0F172A' }}>{profileData.username}</h3>
+                        <span style={{ background: '#EFF6FF', color: '#3B82F6', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '800' }}>{profileData.role}</span>
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Email Address</label>
+                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.email}</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Contact Number</label>
+                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.phone}</div>
+                    </div>
+                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Bio / About</label>
+                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px', lineHeight: '1.5' }}>{profileData.bio}</div>
+                    </div>
+                    <div style={{ marginTop: '10px', padding: '12px', background: '#FEF3C7', color: '#92400E', borderRadius: '8px', fontSize: '12px', border: '1px solid #FDE68A', textAlign: 'center' }}>
+                        ℹ️ Profile details are managed by HR/Admin and cannot be edited.
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
+
       {/* TOAST NOTIFICATION */}
       {toastMessage && (
         <div style={{
@@ -167,9 +225,10 @@ const SPOCDashboard = ({ username, onLogout }) => {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {/* HEADER */}
         <div style={headerStyle}>
-          <span style={{ fontWeight: 700 }}>Business SPOC Dashboard</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <span style={{ fontSize: '12px' }}>Welcome, <b>{username || 'pranav_spoc'}</b></span>
+          <span style={{ fontWeight: 700, color: '#1B3A6B' }}>Business SPOC Dashboard</span>
+          <div style={{display:'flex', alignItems:'center', gap:'15px', cursor: 'pointer'}} onClick={() => setShowProfileModal(true)}>
+            <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
+            <div style={{ width: '35px', height: '35px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', fontWeight: 'bold' }}>{username?.charAt(0).toUpperCase() || 'U'}</div>
             <button onClick={onLogout} style={logoutBtnStyle}>LOGOUT</button>
           </div>
         </div>
@@ -184,13 +243,13 @@ const SPOCDashboard = ({ username, onLogout }) => {
           </div>
           <div onClick={() => setActiveTab('history')} style={summCard(activeTab === 'history')}>
             <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1B3A6B' }}>
-              {allPrograms.filter(p => p.status?.toLowerCase() === 'approved').length}
+              {allPrograms.filter(p => p.status?.toLowerCase() === 'approved' || p.status?.toLowerCase() === 'in progress').length}
             </div>
             <div style={cardLabel}>Active Programs</div>
           </div>
           <div onClick={() => setActiveTab('reports')} style={summCard(activeTab === 'reports')}>
             <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#10B981' }}>
-               {allPrograms.filter(p => p.status?.toLowerCase() === 'approved').length}
+               {allPrograms.filter(p => p.status?.toLowerCase() === 'approved' || p.status?.toLowerCase() === 'in progress').length}
             </div>
             <div style={cardLabel}>Programs to Track</div>
           </div>
@@ -345,6 +404,7 @@ const logoBox = { padding: '25px', fontSize: '22px', fontWeight: 'bold', borderB
 const sbItem = { padding: '15px 25px', cursor: 'pointer', fontSize: '14px', borderLeft: '4px solid transparent', transition: '0.3s' };
 const activeSbItem = { ...sbItem, backgroundColor: '#2563EB', borderLeft: '4px solid #60a5fa', fontWeight: 'bold' };
 const headerStyle = { height: '70px', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px', borderBottom: '1px solid #ddd' };
+
 const logoutBtnStyle = { background: '#EF4444', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' };
 const cardGrid = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px', padding: '30px' };
 const summCard = (active) => ({ backgroundColor: '#fff', padding: '25px', borderRadius: '12px', border: active ? '2px solid #2563EB' : '1px solid #ddd', cursor: 'pointer', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' });
