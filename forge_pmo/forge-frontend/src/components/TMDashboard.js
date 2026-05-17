@@ -645,7 +645,6 @@ const TMDashboard = ({ user, onLogout }) => {
 
           {Object.keys(tasksBySprint).sort().map(sprintName => {
             const firstTask = tasksBySprint[sprintName][0];
-            const sprintId = firstTask?.sprint_id;
             const sprintStatus = firstTask?.sprint_status || 'Planned';
 
             return (
@@ -655,9 +654,6 @@ const TMDashboard = ({ user, onLogout }) => {
                      <span style={{fontSize: '16px', fontWeight: 'bold', color: '#1B3A6B'}}>{sprintName}</span>
                      <span style={sprintBadge(sprintStatus)}>{sprintStatus}</span>
                   </div>
-                  {sprintStatus === 'Planned' && (
-                     <button onClick={() => updateSprintStatus(sprintId, 'In Progress')} style={btnStartSprint}>▶ Start Sprint</button>
-                  )}
                 </div>
 
               <div style={kanbanGrid}>
@@ -675,8 +671,39 @@ const TMDashboard = ({ user, onLogout }) => {
                            <small style={{color: '#94a3b8', fontSize: '10px'}}>#{task.id}</small>
                         </div>
                         <strong style={cardTitleStyleMain}>{task.task_title}</strong>
-                        <div style={{fontSize: '11px', color: '#64748B', marginTop: '10px', display: 'flex', justifyContent: 'space-between'}}>
-                           <span>📅 {task.due_date}</span>
+                        
+                        {/* Premium Hierarchy Context block */}
+                        <div style={{
+                          marginTop: '12px',
+                          padding: '12px',
+                          background: '#f8fafc',
+                          borderRadius: '10px',
+                          border: '1px solid #e2e8f0',
+                          fontSize: '11px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>📁 Program:</span>
+                            <span style={{ color: '#1B3A6B', fontWeight: 'bold', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.program_name}>{task.program_name}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>💼 Project:</span>
+                            <span style={{ color: '#334155', fontWeight: '700', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.project_name}>{task.project_name}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>👤 PM:</span>
+                            <span style={{ color: '#2563EB', fontWeight: 'bold' }}>{task.project_manager}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '4px' }}>
+                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>📅 Sprint End:</span>
+                            <span style={{ color: '#ef4444', fontWeight: 'bold' }}>{task.sprint_deadline}</span>
+                          </div>
+                        </div>
+
+                        <div style={{fontSize: '11px', color: '#64748B', marginTop: '12px', display: 'flex', justifyContent: 'space-between'}}>
+                           <span>📅 Task Due: {task.due_date}</span>
                            <span>⏱ {task.hours_logged || 0}h logged</span>
                         </div>
 

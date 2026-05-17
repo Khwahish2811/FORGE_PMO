@@ -396,11 +396,12 @@ def get_kanban_tasks(request):
                 "status": t.status or "To Do",
                 "project_name": proj.name if proj else "No Project",
                 # pyrefly: ignore [missing-attribute]
-                "program_name": prog.name if proj else "Standard",
+                "program_name": prog.name if prog else "Standard",
                 "project_manager": pm.username if pm else "Not Assigned",
                 "sprint_name": spr.name if spr else "Unassigned",
                 "sprint_id": spr.id if spr else None,
                 "sprint_status": spr.status if spr else "Planned",
+                "sprint_deadline": spr.end_date.strftime('%Y-%m-%d') if (spr and spr.end_date) else "No Date",
                 "priority": t.priority or "Medium",
                 "hours_logged": str(t.hours_logged or 0.00),
                 "due_date": t.due_date.strftime('%Y-%m-%d') if t.due_date else "No Date"
@@ -707,8 +708,56 @@ def get_program_tracker_stats(request):
                 "completion": comp_rate
             })
 
+        # 6. Projects Breakdown (Real-time detailed breakdown)
+        projects_breakdown = []
+        for p in projects:
+            p_tasks = all_tasks.filter(project=p)
+            p_total = p_tasks.count()
+            p_done = p_tasks.filter(status__icontains='Done').count()
+            p_progress = round((p_done / p_total * 100), 1) if p_total > 0 else 0
+
+            # Last team member and task name
+            last_log = DailyEffortLog.objects.filter(task__project=p).order_by('-id').first()
+            last_member = "None"
+            last_task = "No active task yet"
+
+            if last_log:
+                last_member = last_log.user.username
+                last_task = last_log.task.title
+            else:
+                last_t = p_tasks.order_by('-id').first()
+                if last_t:
+                    last_member = last_t.assigned_to.username if last_t.assigned_to else "Unassigned"
+                    last_task = last_t.title
+
+            # Active sprint due date
+            active_s = Sprint.objects.filter(project=p, status='In Progress').first()
+            if not active_s:
+                active_s = Sprint.objects.filter(project=p).order_by('-end_date').first()
+
+            sprint_name = active_s.name if active_s else "No Active Sprint"
+            sprint_due = str(active_s.end_date) if active_s and active_s.end_date else "N/A"
+
+            # Total hours logged on this project
+            total_hours = p_tasks.aggregate(total=Sum('hours_logged'))['total'] or 0.0
+
+            projects_breakdown.append({
+                "id": p.id,
+                "name": p.name,
+                "status": p.status,
+                "progress": p_progress,
+                "total_tasks": p_total,
+                "completed_tasks": p_done,
+                "last_active_member": last_member,
+                "last_active_task": last_task,
+                "sprint_name": sprint_name,
+                "sprint_due_date": sprint_due,
+                "total_hours": round(float(total_hours), 1)
+            })
+
         return Response({
             "program_name": program.name,
+            "pm_name": getattr(program.project_manager_assigned, 'username', "Not Assigned"),
             "overall_progress": progress_val,
             "total_tasks": total_tasks,
             "completed_tasks": done_tasks,
@@ -716,7 +765,8 @@ def get_program_tracker_stats(request):
             "task_distribution": task_dist,
             "recent_logs": recent_logs,
             "gantt_data": gantt_data,
-            "velocity_data": velocity_data
+            "velocity_data": velocity_data,
+            "projects_breakdown": projects_breakdown
         }, status=200)
 
     except Exception as e:
@@ -834,6 +884,54 @@ def program_tracker(request):
 
     overall_progress = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
 
+    # Projects Breakdown
+    projects = Project.objects.filter(program=program)
+    projects_breakdown = []
+    for p in projects:
+        p_tasks = tasks.filter(project=p)
+        p_total = p_tasks.count()
+        p_done = p_tasks.filter(status__icontains='Done').count()
+        p_progress = round((p_done / p_total * 100), 1) if p_total > 0 else 0
+
+        # Last active member and task
+        last_log = DailyEffortLog.objects.filter(task__project=p).order_by('-id').first()
+        last_member = "None"
+        last_task = "No active task yet"
+
+        if last_log:
+            last_member = last_log.user.username
+            last_task = last_log.task.title
+        else:
+            last_t = p_tasks.order_by('-id').first()
+            if last_t:
+                last_member = last_t.assigned_to.username if last_t.assigned_to else "Unassigned"
+                last_task = last_t.title
+
+        # Active sprint due date
+        active_s = Sprint.objects.filter(project=p, status='In Progress').first()
+        if not active_s:
+            active_s = Sprint.objects.filter(project=p).order_by('-end_date').first()
+
+        sprint_name = active_s.name if active_s else "No Active Sprint"
+        sprint_due = str(active_s.end_date) if active_s and active_s.end_date else "N/A"
+
+        # Total hours logged
+        total_hours = p_tasks.aggregate(total=Sum('hours_logged'))['total'] or 0.0
+
+        projects_breakdown.append({
+            "id": p.id,
+            "name": p.name,
+            "status": p.status,
+            "progress": p_progress,
+            "total_tasks": p_total,
+            "completed_tasks": p_done,
+            "last_active_member": last_member,
+            "last_active_task": last_task,
+            "sprint_name": sprint_name,
+            "sprint_due_date": sprint_due,
+            "total_hours": round(float(total_hours), 1)
+        })
+
     return Response({
         "program_name": program.name,
         "pm_name": getattr(program.project_manager_assigned, 'username', "Not Assigned"),
@@ -845,7 +943,8 @@ def program_tracker(request):
         "velocity_data": velocity_data,
         "task_distribution": task_distribution,
         "gantt_data": gantt_data,
-        "recent_logs": recent_logs
+        "recent_logs": recent_logs,
+        "projects_breakdown": projects_breakdown
     })
 
 
