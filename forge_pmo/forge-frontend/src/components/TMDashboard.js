@@ -335,15 +335,21 @@ const TMDashboard = ({ user, onLogout }) => {
     { name: 'Low', count: currentProjectTasks.filter(t => t.priority === 'Low').length, fill: '#3B82F6' }
   ];
 
-  const ganttTasks = currentProjectTasks.map((t, idx) => ({
-      id: String(t.id || `task-${idx}`),
-      name: t.task_title || "Unnamed Task",
-      start: new Date(t.start_date || new Date(new Date(t.due_date || new Date()).getTime() - 3*24*60*60*1000)),
-      end: new Date(t.due_date || new Date().getTime() + 2*24*60*60*1000),
-      progress: t.status === 'Done' ? 100 : t.status === 'In Progress' ? 50 : 0,
-      type: 'task',
-      styles: { progressColor: '#3B82F6', progressSelectedColor: '#1E40AF' }
-  }));
+  const ganttTasks = currentProjectTasks.map((t, idx) => {
+      let sDate = new Date(t.start_date);
+      if (isNaN(sDate)) sDate = new Date(new Date(t.due_date || new Date()).getTime() - 3*24*60*60*1000);
+      let eDate = new Date(t.due_date);
+      if (isNaN(eDate)) eDate = new Date(new Date().getTime() + 2*24*60*60*1000);
+      return {
+          id: String(t.id || `task-${idx}`),
+          name: t.task_title || "Unnamed Task",
+          start: sDate,
+          end: eDate,
+          progress: t.status === 'Done' ? 100 : t.status === 'In Progress' ? 50 : 0,
+          type: 'task',
+          styles: { progressColor: '#3B82F6', progressSelectedColor: '#1E40AF' }
+      };
+  });
 
   return (
     <div style={layoutContainer}>

@@ -1076,15 +1076,21 @@ const lastStatItem = {
               {selectedProgramStats?.gantt_data?.length > 0 ? (
                 <div style={{ width: '100%', overflowX: 'auto', background: '#fff' }}>
                   <Gantt
-                    tasks={selectedProgramStats.gantt_data.map(t => ({
-                      id: String(t.id),
-                      name: t.name || "Task",
-                      start: new Date(t.start || new Date()),
-                      end: new Date(t.end || new Date(new Date().getTime() + 86400000)),
-                      progress: t.progress || 0,
-                      type: 'task',
-                      styles: { progressColor: '#1B3A6B', progressSelectedColor: '#2563EB' },
-                    }))}
+                    tasks={selectedProgramStats.gantt_data.map(t => {
+                      let sDate = new Date(t.start);
+                      if (isNaN(sDate)) sDate = new Date();
+                      let eDate = new Date(t.end);
+                      if (isNaN(eDate)) eDate = new Date(new Date().getTime() + 86400000);
+                      return {
+                        id: String(t.id),
+                        name: t.name || "Task",
+                        start: sDate,
+                        end: eDate,
+                        progress: t.progress || 0,
+                        type: 'task',
+                        styles: { progressColor: '#1B3A6B', progressSelectedColor: '#2563EB' },
+                      };
+                    })}
                     viewMode={ViewMode.Day}
                     listCellWidth="150px"
                     columnWidth={60}

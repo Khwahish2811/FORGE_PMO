@@ -1136,3 +1136,98 @@ def get_team_performance(request):
         
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+@api_view(['GET'])
+def get_all_resources(request):
+    try:
+        from django.contrib.auth.models import User
+        from core.models import Profile, TeamMember, Task, Project, DailyEffortLog
+        from django.db.models import Sum
+        import datetime
+        
+        # Get all profiles
+        profiles = Profile.objects.select_related('user').all()
+        
+        resources_list = []
+        today = datetime.date.today()
+        
+        for profile in profiles:
+            u = profile.user
+            role = profile.role
+            role_display = dict(Profile.ROLES).get(role, role)
+            
+            # 1. Projects managed or assigned
+            active_projects = []
+            if role == 'PGM':
+                # pyrefly: ignore [missing-attribute]
+                projs = Project.objects.filter(program__project_manager_assigned=u, status__in=['Approved', 'Active', 'In Progress'])
+                active_projects = list(projs.values_list('name', flat=True))
+            elif role == 'PM':
+                # pyrefly: ignore [missing-attribute]
+                projs = Project.objects.filter(created_by=u, status__in=['Approved', 'Active', 'In Progress'])
+                active_projects = list(projs.values_list('name', flat=True))
+            else: # TM
+                # pyrefly: ignore [missing-attribute]
+                tms = TeamMember.objects.filter(user=u, project__status__in=['Approved', 'Active', 'In Progress']).select_related('project')
+                active_projects = [tm.project.name for tm in tms]
+            
+            # 2. Total Assigned FTE
+            # pyrefly: ignore [missing-attribute]
+            assigned_fte = TeamMember.objects.filter(
+                user=u,
+                project__status__in=['Approved', 'Active', 'In Progress']
+            ).aggregate(total=Sum('fte_score'))['total'] or 0.0
+            
+            # 3. Total Calculated FTE (Month hours / 160)
+            # pyrefly: ignore [missing-attribute]
+            month_hours = DailyEffortLog.objects.filter(
+                user=u,
+                log_date__month=today.month,
+                log_date__year=today.year
+            ).aggregate(total=Sum('hours_added'))['total'] or 0.0
+            calculated_fte = round(float(month_hours) / 160, 2)
+            
+            # 4. Tasks and Completion status
+            # pyrefly: ignore [missing-attribute]
+            tasks = Task.objects.filter(assigned_to=u)
+            total_tasks = tasks.count()
+            completed_tasks = tasks.filter(status='Done').count()
+            completion_rate = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0.0
+            
+            # 5. Utilization Status
+            if role == 'TM':
+                if assigned_fte > 1.0:
+                    status = 'Overutilized'
+                elif assigned_fte >= 0.5:
+                    status = 'Optimal'
+                elif assigned_fte > 0.0:
+                    status = 'Underutilized'
+                else:
+                    status = 'Available'
+            else:
+                status = 'Active' if len(active_projects) > 0 else 'Available'
+                
+            # 6. Performance Score
+            score = (completion_rate * 0.7) + (min(float(assigned_fte), 2.0) * 15)
+            performance_score = round(score, 1)
+            
+            resources_list.append({
+                "username": u.username,
+                "email": u.email,
+                "role": role,
+                "role_display": role_display,
+                "active_projects": active_projects,
+                "assigned_fte": round(float(assigned_fte), 2),
+                "calculated_fte": calculated_fte,
+                "total_tasks": total_tasks,
+                "completed_tasks": completed_tasks,
+                "completion_rate": completion_rate,
+                "utilization_status": status,
+                "performance_score": performance_score,
+                "phone": profile.phone or '',
+                "bio": profile.bio or ''
+            })
+            
+        return Response(resources_list)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
