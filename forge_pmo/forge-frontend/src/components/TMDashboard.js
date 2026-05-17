@@ -510,30 +510,34 @@ const TMDashboard = ({ user, onLogout }) => {
 
         {/* --- HEADER SUMMARY CARDS --- */}
         <div style={{ display: 'flex', gap: '20px', padding: '0 25px', marginTop: '20px' }}>
-            <div style={headerCard}>
+            <div style={{ ...headerCard, borderLeft: '5px solid #1B3A6B' }}>
                 <h6 style={headerCardTitle}>Active Projects</h6>
                 <h3 style={{ margin: 0, fontWeight: 'bold', color: '#1B3A6B', fontSize: '24px' }}>{projects.length}</h3>
-            </div>
-            
-            <div style={{ ...headerCard, cursor: newProjectCount > 0 ? 'pointer' : 'default', borderLeft: newProjectCount > 0 ? '5px solid #10B981' : '5px solid #F59E0B' }} onClick={newProjectCount > 0 ? clearNotifications : null}>
-                <h6 style={headerCardTitle}>New Assignments</h6>
-                <h3 style={{ margin: 0, fontWeight: 'bold', color: newProjectCount > 0 ? '#10B981' : '#F59E0B', fontSize: '24px' }}>
-                    {newProjectCount > 0 ? `+${newProjectCount} New!` : '0'}
-                </h3>
+                <span style={{ fontSize: '10px', color: '#64748B', display: 'block', marginTop: '4px' }}>Currently assigned</span>
             </div>
 
-            <div style={headerCard}>
+            <div style={{ ...headerCard, borderLeft: '5px solid #10B981' }}>
                 <h6 style={headerCardTitle}>Assigned FTE</h6>
                 <h3 style={{ margin: 0, fontWeight: 'bold', color: '#10B981', fontSize: '24px' }}>
                     {stats.assigned_fte || '0.0'}
                 </h3>
+                <span style={{ fontSize: '10px', color: '#64748B', display: 'block', marginTop: '4px' }}>Sum of workload allocations</span>
             </div>
 
-            <div style={headerCard}>
-                <h6 style={headerCardTitle}>Task Completion Rate</h6>
-                <h3 style={{ margin: 0, fontWeight: 'bold', color: '#3B82F6', fontSize: '24px' }}>
-                    {currentProjectTasks.length > 0 ? Math.round((currentProjectTasks.filter(t => t.status === 'Done').length / currentProjectTasks.length) * 100) : 0}%
+            <div style={{ ...headerCard, borderLeft: '5px solid #F59E0B' }}>
+                <h6 style={headerCardTitle}>Calculated FTE</h6>
+                <h3 style={{ margin: 0, fontWeight: 'bold', color: '#F59E0B', fontSize: '24px' }}>
+                    {stats.fte_score || '0.0'}
                 </h3>
+                <span style={{ fontSize: '10px', color: '#64748B', display: 'block', marginTop: '4px' }}>Monthly hours logged / 160</span>
+            </div>
+            
+            <div style={{ ...headerCard, cursor: newProjectCount > 0 ? 'pointer' : 'default', borderLeft: newProjectCount > 0 ? '5px solid #EF4444' : '5px solid #6366F1' }} onClick={newProjectCount > 0 ? clearNotifications : null}>
+                <h6 style={headerCardTitle}>New Assignments</h6>
+                <h3 style={{ margin: 0, fontWeight: 'bold', color: newProjectCount > 0 ? '#EF4444' : '#6366F1', fontSize: '24px' }}>
+                    {newProjectCount > 0 ? `+${newProjectCount} New!` : '0'}
+                </h3>
+                <span style={{ fontSize: '10px', color: '#64748B', display: 'block', marginTop: '4px' }}>Inbox notifications</span>
             </div>
         </div>
 

@@ -307,7 +307,7 @@ const lastStatItem = {
   const handleInputChange = (field, value) => setProjectData({ ...projectData, [field]: value });
   const handleMemberChange = (index, field, value) => {
     const newTeam = [...projectData.team];
-    newTeam[index][field] = field === 'userId' ? (value ? Number(value) : '') : value;
+    newTeam[index][field] = field === 'userId' ? (value ? Number(value) : '') : field === 'fte' ? (value ? parseFloat(value) : 0.0) : value;
     setProjectData({ ...projectData, team: newTeam });
   };
   const handleSprintChange = (index, field, value) => {
@@ -598,13 +598,27 @@ const lastStatItem = {
                   <div style={tableContainer}>
                     <table style={tableStyle}>
                       <thead style={theadStyle}>
-                        <tr><th style={thStyle}>PROJECT NAME</th><th style={thStyle}>TEAM WORKLOAD</th><th style={thStyle}>STATUS</th><th style={thStyle}>TASK ACTION</th></tr>
+                        <tr><th style={thStyle}>PROJECT NAME</th><th style={thStyle}>PROJECT FTE</th><th style={thStyle}>TEAM WORKLOAD</th><th style={thStyle}>STATUS</th><th style={thStyle}>TASK ACTION</th></tr>
                       </thead>
                       <tbody>
                         {myProjects.map((project) => (
                           <React.Fragment key={project.id}>
                             <tr style={trStyle}>
                               <td style={tdStyle}><span onClick={() => toggleRow(project.id)} style={{ cursor: 'pointer', color: '#2563EB', textDecoration: 'underline' }}><b>{project.name}</b> {expandedProjectId === project.id ? '▴' : '▾'}</span></td>
+                              <td style={tdStyle}>
+                                <span style={{
+                                  background: '#EFF6FF',
+                                  color: '#1E40AF',
+                                  padding: '5px 12px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 'bold',
+                                  border: '1px solid #BFDBFE',
+                                  display: 'inline-block'
+                                }}>
+                                  {(project.team_members || []).reduce((sum, m) => sum + parseFloat(m.fte || 0), 0).toFixed(2)} FTE
+                                </span>
+                              </td>
                               <td style={tdStyle}>
                                 <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                                   {project.team_members && project.team_members.length > 0 ? (
@@ -682,10 +696,34 @@ const lastStatItem = {
                             </tr>
                             {expandedProjectId === project.id && (
                               <tr>
-                                <td colSpan="4" style={{ padding: '20px', backgroundColor: '#f8fafc' }}>
+                                <td colSpan="5" style={{ padding: '20px', backgroundColor: '#f8fafc' }}>
                                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                                     <div style={innerCardStyle}>
                                       <h5 style={innerTitleStyle}>👥 Project Team</h5>
+                                      <div style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        background: 'linear-gradient(135deg, #1B3A6B, #2563EB)',
+                                        color: '#fff',
+                                        padding: '12px 18px',
+                                        borderRadius: '10px',
+                                        marginBottom: '15px',
+                                        boxShadow: '0 4px 12px rgba(37,99,235,0.15)'
+                                      }}>
+                                        <div>
+                                          <div style={{ fontSize: '10px', textTransform: 'uppercase', opacity: 0.8, fontWeight: '800', letterSpacing: '0.5px' }}>Project FTE</div>
+                                          <div style={{ fontSize: '18px', fontWeight: 'bold', marginTop: '2px' }}>
+                                            {(project.team_members || []).reduce((sum, m) => sum + parseFloat(m.fte || 0), 0).toFixed(2)} FTE
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <div style={{ fontSize: '10px', textTransform: 'uppercase', opacity: 0.8, fontWeight: '800', letterSpacing: '0.5px' }}>Team Capacity</div>
+                                          <div style={{ fontSize: '18px', fontWeight: 'bold', marginTop: '2px' }}>
+                                            {project.team_members?.length || 0} Members Allocated
+                                          </div>
+                                        </div>
+                                      </div>
                                       <table style={miniTableStyle}>
                                         <thead><tr style={miniTheadStyle}><th style={miniThStyle}>Member</th><th style={miniThStyle}>Role</th><th style={miniThStyle}>FTE</th><th style={miniThStyle}>Tasks</th></tr></thead>
                                         <tbody>

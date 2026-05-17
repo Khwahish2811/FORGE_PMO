@@ -248,7 +248,7 @@ def create_project_plan(request):
                     project=project,
                     user=user_obj,
                     role=member.get('role'),
-                    fte_score=member.get('fte', 1)
+                    fte_score=float(member.get('fte') or 1.0)
                 )
 
             return Response({"success": True, "project_id": project.id}, status=201)
