@@ -3,6 +3,15 @@ import { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, LineCh
 import { Gantt, ViewMode } from 'gantt-task-react';
 import "gantt-task-react/dist/index.css";
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return dateStr;
+};
+
 const SPOCDashboard = ({ username, onLogout }) => {
   const [allPrograms, setAllPrograms] = useState([]);
   const [displayPrograms, setDisplayPrograms] = useState([]);
@@ -235,7 +244,10 @@ const SPOCDashboard = ({ username, onLogout }) => {
       )}
       {/* SIDEBAR */}
       <div style={{ ...sidebarStyle, width: '260px', display: 'flex', flexDirection: 'column', height: '100vh', borderRight: '1px solid #1e293b' }}>
-        <div style={logoBox}> FORGE PMO</div>
+        <div style={{ ...logoBox, display: 'flex', flexDirection: 'column', gap: '2px', padding: '20px 25px' }}>
+        <span style={{ fontSize: '11px', fontWeight: '500', color: '#93c5fd', letterSpacing: '2px', textTransform: 'uppercase' }}>AM/NS</span>
+        <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>FORGE</span>
+      </div>
         
         <div style={{ padding: '20px 25px 8px 25px', fontSize: '11px', color: '#88a3d4', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
           Program Workflow
@@ -320,7 +332,7 @@ const SPOCDashboard = ({ username, onLogout }) => {
                           <div style={{ fontSize: '11px', color: '#64748B' }}>{pgm.description}</div>
                         </td>
                         <td style={tdStyle}>{pgm.manager_name || 'shailja_pgm'}</td>
-                        <td style={tdStyle}>{pgm.start_date} to {pgm.end_date}</td>
+                        <td style={tdStyle}>{formatDate(pgm.start_date)} to {formatDate(pgm.end_date)}</td>
                         <td style={tdStyle}>
                           <span style={statusBadge(pgm.status)}>{pgm.status}</span>
                         </td>
@@ -464,7 +476,7 @@ const SPOCDashboard = ({ username, onLogout }) => {
                                         <td style={{ padding: '15px 10px', fontSize: '13px', color: '#334155' }}>
                                             <div style={{ fontWeight: 'bold', color: '#1e293b' }}>{proj.sprint_name}</div>
                                             <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                Due: {proj.sprint_due_date}
+                                                Due: {formatDate(proj.sprint_due_date)}
                                             </div>
                                         </td>
                                         {/* Last Task Worked On */}

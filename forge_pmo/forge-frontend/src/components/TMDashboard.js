@@ -3,6 +3,15 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import { Gantt, ViewMode } from 'gantt-task-react';
 import "gantt-task-react/dist/index.css";
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return dateStr;
+};
+
 const TMDashboard = ({ user, onLogout }) => {
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -520,7 +529,10 @@ const TMDashboard = ({ user, onLogout }) => {
 
       {/* SIDEBAR */}
       <div style={sidebarStyle}>
-        <div style={logoSection}><div style={logoCircle}>F</div><span style={logoText}>FORGE Workspace</span></div>
+        <div style={{ ...logoSection, flexDirection: 'column', alignItems: 'flex-start', gap: '2px', paddingLeft: '15px' }}>
+        <span style={{ fontSize: '11px', fontWeight: '500', color: '#93c5fd', letterSpacing: '2px', textTransform: 'uppercase' }}>AM/NS</span>
+        <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>FORGE</span>
+      </div>
 
         <div style={sidebarScrollArea}>
             <div style={navGroup}>
@@ -735,7 +747,7 @@ const TMDashboard = ({ user, onLogout }) => {
                                  <div>
                                     <span style={priorityTagHi}>High Priority</span>
                                     <h4 style={{margin: '10px 0 5px 0', fontSize: '16px', color: '#0F172A'}}>{urgentTask.task_title}</h4>
-                                    <p style={{margin: 0, fontSize: '12px', color: '#64748B'}}>Due: <b>{urgentTask.due_date}</b> • {urgentTask.project_name}</p>
+                                    <p style={{margin: 0, fontSize: '12px', color: '#64748B'}}>Due: <b>{formatDate(urgentTask.due_date)}</b> • {urgentTask.project_name}</p>
                                  </div>
                                  <button onClick={() => startFocusForTask(urgentTask)} style={{ ...btnFocusStart, alignSelf: 'center' }}>
                                      Start Focus Mode
@@ -946,7 +958,7 @@ const TMDashboard = ({ user, onLogout }) => {
                         </div>
 
                         <div style={{fontSize: '11px', color: '#64748B', marginTop: '12px', display: 'flex', justifyContent: 'space-between'}}>
-                           <span>Task Due: {task.due_date}</span>
+                           <span>Task Due: {formatDate(task.due_date)}</span>
                            <span>{task.hours_logged || 0}h logged</span>
                         </div>
 

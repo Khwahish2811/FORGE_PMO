@@ -18,6 +18,15 @@ const getStatusColor = (endDate) => {
   return '#10b981'; // Green (On Track)
 };
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return dateStr;
+};
+
 const PGMDashboard = ({ username, onLogout }) => {
   // --- EXISTING STATES (Preserved) ---
   const [showModal, setShowModal] = useState(false);
@@ -409,7 +418,10 @@ const PGMDashboard = ({ username, onLogout }) => {
 
       {/* SIDEBAR */}
       <div style={sidebarStyle}>
-        <div style={logoBox}>F FORGE</div>
+        <div style={{ ...logoBox, display: 'flex', flexDirection: 'column', gap: '2px', padding: '20px 25px' }}>
+        <span style={{ fontSize: '11px', fontWeight: '500', color: '#93c5fd', letterSpacing: '2px', textTransform: 'uppercase' }}>AM/NS</span>
+        <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>FORGE</span>
+      </div>
         <div style={sbSecTitle}>Navigation</div>
         <div
           onClick={() => setActiveTab('dashboard')}
@@ -484,7 +496,7 @@ const PGMDashboard = ({ username, onLogout }) => {
                               <small style={{ color: '#666' }}>Program: {proj.program_name}</small>
                             </td>
                             <td style={tdStyle}>{proj.created_by_name || proj.pm_name}</td>
-                            <td style={tdStyle}>{proj.start_date} to {proj.end_date}</td>
+                            <td style={tdStyle}>{formatDate(proj.start_date)} to {formatDate(proj.end_date)}</td>
                             <td style={tdStyle}>
                               <button onClick={() => { setSelectedReview(proj); setShowReviewModal(true); }} style={reviewBtn}>
                                 Review Plan
@@ -528,7 +540,7 @@ const PGMDashboard = ({ username, onLogout }) => {
                               <span style={{ fontWeight: 700, color: '#1E293B' }}>{s.project_name}</span><br />
                               <small style={{ color: '#64748B' }}>Program: {s.program_name}</small>
                             </td>
-                            <td style={tdStyle}>{s.start_date} to {s.end_date}</td>
+                            <td style={tdStyle}>{formatDate(s.start_date)} to {formatDate(s.end_date)}</td>
                             <td style={tdStyle}>
                               <button onClick={() => { setSelectedSprintReview(s); setShowSprintReviewModal(true); }} style={{ ...reviewBtn, backgroundColor: '#ea580c' }}>
                                 Review Sprint
@@ -610,7 +622,7 @@ const PGMDashboard = ({ username, onLogout }) => {
                         <tr key={pgm.id} style={trStyle}>
                           <td style={tdStyle}>
                             <div style={{ fontWeight: '700', color: '#1e293b' }}>{pgm.name}</div>
-                            <div style={{ fontSize: '11px', color: '#64748b' }}>{pgm.start_date} to {pgm.end_date}</div>
+                            <div style={{ fontSize: '11px', color: '#64748b' }}>{formatDate(pgm.start_date)} to {formatDate(pgm.end_date)}</div>
                           </td>
                           <td style={tdStyle}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1022,7 +1034,7 @@ const PGMDashboard = ({ username, onLogout }) => {
                           <td style={{ padding: '15px 10px', fontSize: '13px', color: '#334155' }}>
                             <div style={{ fontWeight: 'bold', color: '#1e293b' }}>{proj.sprint_name}</div>
                             <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              Due: {proj.sprint_due_date}
+                              Due: {formatDate(proj.sprint_due_date)}
                             </div>
                           </td>
                           {/* Last Task Worked On */}
@@ -1089,7 +1101,7 @@ const PGMDashboard = ({ username, onLogout }) => {
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#ef4444' }}>
-                          Due: {log.due_date || 'No Date'}
+                          Due: {log.due_date ? formatDate(log.due_date) : 'No Date'}
                         </div>
                         <div style={{
                           fontSize: '10px',
@@ -1158,7 +1170,7 @@ const PGMDashboard = ({ username, onLogout }) => {
                   {selectedReview.sprints && selectedReview.sprints.length > 0 ? (
                     selectedReview.sprints.map((s, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid #edf2f7' }}>
-                        <td style={tdStyle}>{s.name}</td><td style={tdStyle}>{s.start_date} to {s.end_date}</td>
+                        <td style={tdStyle}>{s.name}</td><td style={tdStyle}>{formatDate(s.start_date)} to {formatDate(s.end_date)}</td>
                         <td style={tdStyle}>
                           <span style={{ height: '10px', width: '10px', borderRadius: '50%', backgroundColor: getStatusColor(s.end_date), display: 'inline-block', marginRight: '5px' }}></span>
                           <span style={{ fontSize: '11px', color: getStatusColor(s.end_date) }}>{new Date(s.end_date).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0) ? 'Overdue' : 'On Track'}</span>
@@ -1232,7 +1244,7 @@ const PGMDashboard = ({ username, onLogout }) => {
                 </div>
                 <div>
                   <label style={{ ...lbl, fontSize: '12px', color: '#78350f' }}>Sprint Timeline</label>
-                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>{selectedSprintReview?.start_date} to {selectedSprintReview?.end_date}</div>
+                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>{formatDate(selectedSprintReview?.start_date)} to {formatDate(selectedSprintReview?.end_date)}</div>
                 </div>
               </div>
 
@@ -1367,7 +1379,7 @@ const PGMDashboard = ({ username, onLogout }) => {
                           <td style={{ padding: '10px', fontWeight: 'bold', color: '#64748b' }}>{r.row_index}</td>
                           <td style={{ padding: '10px', fontWeight: 'bold', color: r.is_valid ? '#0f172a' : '#991b1b' }}>{r.name || '(Empty)'}</td>
                           <td style={{ padding: '10px', color: '#475569' }}>
-                            {r.start_date || r.end_date ? `${r.start_date || 'N/A'} to ${r.end_date || 'N/A'}` : 'No Dates Specified'}
+                            {r.start_date || r.end_date ? `${formatDate(r.start_date)} to ${formatDate(r.end_date)}` : 'No Dates Specified'}
                           </td>
                           <td style={{ padding: '10px', color: '#64748b', maxLines: 1, textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '200px' }}>
                             {r.description || '-'}

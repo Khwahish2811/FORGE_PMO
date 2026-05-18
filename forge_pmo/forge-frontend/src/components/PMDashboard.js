@@ -19,6 +19,15 @@ const getStatusColor = (endDate) => {
     return '#10b981';
 };
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return dateStr;
+};
+
 const PMDashboard = ({ username, onLogout }) => {
   const [assignedPrograms, setAssignedPrograms] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -609,7 +618,10 @@ const lastStatItem = {
 
       {/* SIDEBAR */}
       <div style={sidebarStyle}>
-        <div style={logoBox}>F FORGE</div>
+        <div style={{ ...logoBox, display: 'flex', flexDirection: 'column', gap: '2px', padding: '20px 25px' }}>
+        <span style={{ fontSize: '11px', fontWeight: '500', color: '#93c5fd', letterSpacing: '2px', textTransform: 'uppercase' }}>AM/NS</span>
+        <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>FORGE</span>
+      </div>
         <div style={sbSecTitle}>Navigation</div>
         <div style={{ ...sbItem, backgroundColor: activeTab === 'assignments' ? '#2563EB' : 'transparent', color: '#fff' }} onClick={() => { setActiveTab('assignments'); setShowProjectForm(false); }}>My Assignments</div>
         <div style={{ ...sbItem, backgroundColor: activeTab === 'execution' ? '#2563EB' : 'transparent', color: '#fff' }} onClick={() => { setActiveTab('execution'); setShowProjectForm(false); }}>Project Execution</div>
@@ -1178,7 +1190,7 @@ const lastStatItem = {
                                             return (
                                               <tr key={idx} style={miniTrStyle}>
                                                 <td style={miniTdStyle}>{s.name}</td>
-                                                <td style={miniTdStyle}>{s.start_date} to {s.end_date}</td>
+                                                <td style={miniTdStyle}>{formatDate(s.start_date)} to {formatDate(s.end_date)}</td>
                                                 <td style={miniTdStyle}>{statusBadge}</td>
                                               </tr>
                                             );
@@ -1256,7 +1268,7 @@ const lastStatItem = {
                         {assignedPrograms.map((pgm) => (
                           <tr key={pgm.id} style={trStyle}>
                             <td style={tdStyle}><b>{pgm.name}</b></td>
-                            <td style={tdStyle}>{pgm.start_date} to {pgm.end_date}</td>
+                            <td style={tdStyle}>{formatDate(pgm.start_date)} to {formatDate(pgm.end_date)}</td>
                             <td style={tdStyle}>{pgm.manager_name || 'System Assigned'}</td>
                                                        <td style={tdStyle}>
     <button
@@ -1307,7 +1319,7 @@ const lastStatItem = {
                       <tbody>
                         {workingPrograms.length > 0 ? workingPrograms.map((pgm) => (
                           <tr key={pgm.id} style={trStyle}>
-                            <td style={tdStyle}><b>{pgm.name}</b><div style={{ fontSize: '11px', color: '#64748b' }}>{pgm.start_date} to {pgm.end_date}</div></td>
+                            <td style={tdStyle}><b>{pgm.name}</b><div style={{ fontSize: '11px', color: '#64748b' }}>{formatDate(pgm.start_date)} to {formatDate(pgm.end_date)}</div></td>
                             <td style={tdStyle}>{pgm.pm_name}</td>
                             <td style={tdStyle}>
                               {(() => {
@@ -1586,7 +1598,7 @@ const lastStatItem = {
                                         <td style={{ padding: '15px 10px', fontSize: '13px', color: '#334155' }}>
                                             <div style={{ fontWeight: 'bold', color: '#1e293b' }}>{proj.sprint_name}</div>
                                             <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                 Due: {proj.sprint_due_date}
+                                                 Due: {formatDate(proj.sprint_due_date)}
                                             </div>
                                         </td>
                                         {/* Last Task Worked On */}
@@ -1643,7 +1655,7 @@ const lastStatItem = {
                         <div style={{ marginTop: '4px', color: '#475569' }}><b>Task:</b> {log.task_name || 'Unnamed Task'}</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#ef4444' }}>Due: {log.due_date || 'No Date'}</div>
+                        <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#ef4444' }}>Due: {log.due_date ? formatDate(log.due_date) : 'No Date'}</div>
                         <div style={{ fontSize: '10px', marginTop: '4px', background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: '10px', display: 'inline-block' }}>{log.status || 'In Progress'}</div>
                       </div>
                     </div>
@@ -1770,7 +1782,7 @@ const lastStatItem = {
                         />
                         {task.sprint_id && (
                           <div style={{ fontSize: '9px', color: '#64748b', marginTop: '4px' }}>
-                            Sprint: {activeProjectForTask?.sprints?.find(s => String(s.id) === String(task.sprint_id))?.start_date} to {activeProjectForTask?.sprints?.find(s => String(s.id) === String(task.sprint_id))?.end_date}
+                            Sprint: {formatDate(activeProjectForTask?.sprints?.find(s => String(s.id) === String(task.sprint_id))?.start_date)} to {formatDate(activeProjectForTask?.sprints?.find(s => String(s.id) === String(task.sprint_id))?.end_date)}
                           </div>
                         )}
                       </div>
@@ -1858,7 +1870,7 @@ const lastStatItem = {
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ ...lbl, fontSize: '13px', color: '#0891b2' }}>Project Name</label>
                 <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#1e293b', marginTop: '5px' }}>{selectedProjectForSprint?.name}</div>
-                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>Project Timeline: <b>{selectedProjectForSprint?.start_date}</b> to <b>{selectedProjectForSprint?.end_date}</b></div>
+                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>Project Timeline: <b>{formatDate(selectedProjectForSprint?.start_date)}</b> to <b>{formatDate(selectedProjectForSprint?.end_date)}</b></div>
               </div>
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ ...lbl, fontSize: '13px', color: '#0891b2' }}>Sprint Name</label>
