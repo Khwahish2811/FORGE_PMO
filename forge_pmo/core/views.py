@@ -649,8 +649,18 @@ def get_dashboard_stats(request):
                 try:
                     project_obj = Project.objects.get(name=project_name)
                     stats_data["latest_update_note"] = project_obj.latest_update_note or ""
+                    
+                    # Calculate Project Total FTE and User's Project FTE
+                    project_team = TeamMember.objects.filter(project=project_obj)
+                    stats_data["project_total_fte"] = round(float(project_team.aggregate(Sum('fte_score'))['fte_score__sum'] or 0.0), 2)
+                    
+                    user_tm = project_team.filter(user__username=username).first()
+                    stats_data["user_project_fte"] = round(float(user_tm.fte_score if user_tm else 0.0), 2)
+
                 except Project.DoesNotExist:
                     stats_data["latest_update_note"] = ""
+                    stats_data["project_total_fte"] = 0.0
+                    stats_data["user_project_fte"] = 0.0
 
 
             # Today's hours

@@ -21,7 +21,8 @@ const TMDashboard = ({ user, onLogout }) => {
   });
   const [toastMessage, setToastMessage] = useState(null);
   const [activeView, setActiveView] = useState('dashboard');
-
+  const [expandedNodes, setExpandedNodes] = useState({});
+  const toggleNode = (nodeId) => setExpandedNodes(prev => ({...prev, [nodeId]: !prev[nodeId]}));
 
   // Focus Mode State - Pro Version
   const [isFocusMode, setIsFocusMode] = useState(false);
@@ -376,6 +377,17 @@ const TMDashboard = ({ user, onLogout }) => {
       };
   });
 
+  const hierarchyData = tasks.reduce((acc, task) => {
+      const prog = task.program_name || 'Standard';
+      const proj = task.project_name || 'No Project';
+      const spr = task.sprint_name || 'Unassigned';
+      if (!acc[prog]) acc[prog] = {};
+      if (!acc[prog][proj]) acc[prog][proj] = {};
+      if (!acc[prog][proj][spr]) acc[prog][proj][spr] = [];
+      acc[prog][proj][spr].push(task);
+      return acc;
+  }, {});
+
   return (
     <div style={layoutContainer}>
       {/* PROFILE MODAL */}
@@ -542,44 +554,98 @@ const TMDashboard = ({ user, onLogout }) => {
                 {/* --- HEADER SUMMARY CARDS REMOVED --- */}
         {activeView === 'dashboard' ? (
             <div style={{ padding: '25px' }}>
-               <h3 style={sectionTitlePremium}> My Projects Quick Progress</h3>
-               <div style={{ background: '#fff', borderRadius: '15px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                       <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                           <tr>
-                               <th style={{ padding: '15px', textAlign: 'left', color: '#64748B', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase' }}>Project Name</th>
-                               <th style={{ padding: '15px', textAlign: 'left', color: '#64748B', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase' }}>Project Manager</th>
-                               <th style={{ padding: '15px', textAlign: 'left', color: '#64748B', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase' }}>My Tasks Completed</th>
-                               <th style={{ padding: '15px', textAlign: 'left', color: '#64748B', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase' }}>Progress</th>
-                           </tr>
-                       </thead>
-                       <tbody>
-                           {projects.length > 0 ? projects.map((proj, idx) => {
-                               const projTasks = tasks.filter(t => t.project_name === proj.name);
-                               const total = projTasks.length;
-                               const done = projTasks.filter(t => t.status === 'Done').length;
-                               const progress = total === 0 ? 0 : Math.round((done / total) * 100);
-                               return (
-                                   <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', transition: '0.2s' }} onClick={() => { setSelectedProjectId(proj.name); setActiveView('project'); }} className="activity-card">
-                                       <td style={{ padding: '15px', fontWeight: 'bold', color: '#1B3A6B' }}>{proj.name}</td>
-                                       <td style={{ padding: '15px', color: '#475569', fontSize: '13px' }}>{proj.pm || 'Unassigned'}</td>
-                                       <td style={{ padding: '15px', color: '#475569', fontSize: '13px' }}>{done} / {total} Tasks</td>
-                                       <td style={{ padding: '15px' }}>
-                                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                               <div style={{ flex: 1, height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
-                                                   <div style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(90deg, #3b82f6, #10b981)' }}></div>
-                                               </div>
-                                               <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#1B3A6B' }}>{progress}%</span>
-                                           </div>
-                                       </td>
-                                   </tr>
-                               );
-                           }) : (
-                               <tr><td colSpan="4" style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>No active projects found.</td></tr>
-                           )}
-                       </tbody>
-                   </table>
-               </div>
+                {/* STICKY KANBAN CARDS FOR FTE AND PROGRAMS */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '25px' }}>
+                    <div style={{ background: '#fff', padding: '20px', borderRadius: '15px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: '#64748B', fontSize: '13px', textTransform: 'uppercase' }}>Total Active Programs</h4>
+                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#1B3A6B' }}>{Object.keys(hierarchyData).length}</div>
+                    </div>
+                    <div style={{ background: '#fff', padding: '20px', borderRadius: '15px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: '#64748B', fontSize: '13px', textTransform: 'uppercase' }}>Total Assigned FTE</h4>
+                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#10B981' }}>{stats.assigned_fte || '0.0'}</div>
+                    </div>
+                    <div style={{ background: '#fff', padding: '20px', borderRadius: '15px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: '#64748B', fontSize: '13px', textTransform: 'uppercase' }}>Total Calculated FTE</h4>
+                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#F59E0B' }}>{stats.fte_score || '0.0'}</div>
+                    </div>
+                </div>
+
+                <div style={{ background: '#fff', borderRadius: '15px', border: '1px solid #e2e8f0', padding: '20px' }}>
+                    <h3 style={sectionTitlePremium}>Hierarchy: Programs & Projects</h3>
+                    {Object.keys(hierarchyData).length > 0 ? Object.entries(hierarchyData).map(([progName, projectsMap]) => (
+                        <div key={progName} style={{ marginBottom: '15px', border: '1px solid #f1f5f9', borderRadius: '10px', overflow: 'hidden' }}>
+                            <div 
+                                onClick={() => toggleNode(`prog-${progName}`)} 
+                                style={{ background: '#f8fafc', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '15px' }}>📁 Program: {progName}</span>
+                                    {notifications.some(n => Object.keys(projectsMap).some(p => n.message.includes(p))) && (
+                                        <span style={{ background: '#ef4444', color: '#fff', fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '10px' }}>UPDATES INSIDE</span>
+                                    )}
+                                </div>
+                                <span>{expandedNodes[`prog-${progName}`] ? '▼' : '▶'}</span>
+                            </div>
+                            {expandedNodes[`prog-${progName}`] && (
+                                <div style={{ padding: '15px', background: '#fff' }}>
+                                    {Object.entries(projectsMap).map(([projName, sprintsMap]) => {
+                                        const projTasks = tasks.filter(t => t.project_name === projName);
+                                        const done = projTasks.filter(t => t.status === 'Done').length;
+                                        const progress = projTasks.length === 0 ? 0 : Math.round((done / projTasks.length) * 100);
+                                        return (
+                                            <div key={projName} style={{ marginBottom: '15px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                                                <div 
+                                                    style={{ padding: '12px', background: '#f1f5f9', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                                                    onClick={() => toggleNode(`proj-${progName}-${projName}`)}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                                        <span style={{ fontWeight: 'bold', color: '#334155' }}>💼 Project: {projName}</span>
+                                                        {notifications.some(n => n.message.includes(projName)) && (
+                                                            <span style={{ background: '#ef4444', color: '#fff', fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '10px' }}>NEW UPDATE</span>
+                                                        )}
+                                                        <button onClick={(e) => { e.stopPropagation(); setSelectedProjectId(projName); setActiveView('project'); }} style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>View Board</button>
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                                        <span style={{ fontSize: '12px', color: '#64748b' }}>{progress}% Done</span>
+                                                        <span>{expandedNodes[`proj-${progName}-${projName}`] ? '▼' : '▶'}</span>
+                                                    </div>
+                                                </div>
+                                                {expandedNodes[`proj-${progName}-${projName}`] && (
+                                                    <div style={{ padding: '15px' }}>
+                                                        {Object.entries(sprintsMap).map(([sprintName, sprintTasks]) => (
+                                                            <div key={sprintName} style={{ marginBottom: '10px' }}>
+                                                                <div 
+                                                                    style={{ padding: '8px', background: '#e0e7ff', borderRadius: '6px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}
+                                                                    onClick={() => toggleNode(`spr-${progName}-${projName}-${sprintName}`)}>
+                                                                    <span style={{ fontWeight: 'bold', color: '#3730a3', fontSize: '13px' }}>🏃 Sprint: {sprintName}</span>
+                                                                    <span>{expandedNodes[`spr-${progName}-${projName}-${sprintName}`] ? '▼' : '▶'}</span>
+                                                                </div>
+                                                                {expandedNodes[`spr-${progName}-${projName}-${sprintName}`] && (
+                                                                    <div style={{ paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                        {sprintTasks.map(t => (
+                                                                            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', border: '1px solid #f1f5f9', borderRadius: '4px', fontSize: '13px' }}>
+                                                                                <span>{t.task_title}</span>
+                                                                                <span style={{ 
+                                                                                    padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold',
+                                                                                    background: t.status === 'Done' ? '#d1fae5' : t.status === 'In Progress' ? '#fef3c7' : '#fee2e2',
+                                                                                    color: t.status === 'Done' ? '#065f46' : t.status === 'In Progress' ? '#92400e' : '#991b1b'
+                                                                                }}>{t.status}</span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )) : (
+                        <div style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>No active assignments found.</div>
+                    )}
+                </div>
             </div>
         ) : (
             <>
@@ -592,16 +658,16 @@ const TMDashboard = ({ user, onLogout }) => {
                       </div>
                   </div>
               )}
-        <div style={{display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '25px', padding: '25px'}}>
+        <div style={{display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '25px', padding: '25px', alignItems: 'stretch'}}>
            {/* SMART AGENDA */}
-           <div style={premiumCard}>
+           <div style={{ ...premiumCard, display: 'flex', flexDirection: 'column' }}>
               <h3 style={sectionTitlePremium}> Smart Agenda</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: newProjectCount > 0 || notifications.length > 0 ? '1.2fr 1fr' : '1fr', gap: '15px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: ((newProjectCount > 0 && activeView === 'dashboard') || notifications.filter(n => activeView === 'dashboard' || n.message.includes(selectedProjectId)).length > 0) ? '1.2fr 1fr' : '1fr', gap: '15px', flex: 1 }}>
                   {/* Column 1: Daily Focus & PM Alerts */}
-                  <div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                       {/* Red Alerts for PM added/updated tasks */}
-                      {notifications.filter(n => n.message.includes('PM_ADD') || n.message.includes('added by the Project Manager')).map(n => (
-                          <div key={n.id} style={{ background: '#fef2f2', padding: '12px 15px', borderRadius: '10px', border: '1px solid #fca5a5', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      {notifications.filter(n => (n.message.includes('PM_ADD') || n.message.includes('added by the Project Manager')) && (activeView === 'dashboard' || n.message.includes(selectedProjectId))).map(n => (
+                          <div key={n.id} style={{ background: '#fef2f2', padding: '12px 15px', borderRadius: '10px', border: '1px solid #fca5a5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <div>
                                   <span style={{ fontSize: '9px', fontWeight: 'bold', color: '#b91c1c', background: '#fee2e2', padding: '2px 8px', borderRadius: '12px', border: '1px solid #f87171', textTransform: 'uppercase' }}>PM Update Required</span>
                                   <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#991b1b', fontWeight: 'bold' }}>{n.message.replace('PM_ADD: ', '')}</p>
@@ -611,36 +677,36 @@ const TMDashboard = ({ user, onLogout }) => {
                       ))}
 
                       {urgentTask ? (
-                          <div style={urgentTaskBox}>
-                              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                          <div style={{ ...urgentTaskBox, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px'}}>
                                  <div>
                                     <span style={priorityTagHi}>High Priority</span>
                                     <h4 style={{margin: '10px 0 5px 0', fontSize: '16px', color: '#0F172A'}}>{urgentTask.task_title}</h4>
                                     <p style={{margin: 0, fontSize: '12px', color: '#64748B'}}>Due: <b>{urgentTask.due_date}</b> • {urgentTask.project_name}</p>
                                  </div>
-                                 <button onClick={() => startFocusForTask(urgentTask)} style={btnFocusStart}>
+                                 <button onClick={() => startFocusForTask(urgentTask)} style={{ ...btnFocusStart, alignSelf: 'center' }}>
                                      Start Focus Mode
                                  </button>
                               </div>
                           </div>
                       ) : (
-                          <div style={emptyStateBox}> No urgent tasks! You are all caught up.</div>
+                          <div style={{ ...emptyStateBox, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100px' }}> No urgent tasks! You are all caught up.</div>
                       )}
                   </div>
 
                   {/* Column 2: New Project / Task Assignments Panel (smart agenda side) */}
-                  {(newProjectCount > 0 || notifications.length > 0) && (
-                      <div style={{ background: '#eff6ff', padding: '15px', borderRadius: '10px', border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto' }}>
+                  {((newProjectCount > 0 && activeView === 'dashboard') || notifications.filter(n => activeView === 'dashboard' || n.message.includes(selectedProjectId)).length > 0) && (
+                      <div style={{ background: '#eff6ff', padding: '15px', borderRadius: '10px', border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '100%', overflowY: 'auto' }}>
                           <h4 style={{ margin: 0, fontSize: '11px', color: '#1e3a8a', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Inbox Assignments</h4>
                           
-                          {newProjectCount > 0 && (
+                          {newProjectCount > 0 && activeView === 'dashboard' && (
                               <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #dbeafe' }}>
                                   <div style={{ fontSize: '9px', fontWeight: '800', color: '#2563eb', textTransform: 'uppercase' }}>Project Assignment</div>
                                   <h5 style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#1e293b' }}>{newProjectCount} new project(s) assigned to you.</h5>
                               </div>
                           )}
 
-                          {notifications.filter(n => !n.message.includes('PM_ADD') && !n.message.includes('added by the Project Manager')).map(n => (
+                          {notifications.filter(n => (!n.message.includes('PM_ADD') && !n.message.includes('added by the Project Manager')) && (activeView === 'dashboard' || n.message.includes(selectedProjectId))).map(n => (
                               <div key={n.id} style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #dbeafe' }}>
                                   <div style={{ fontSize: '9px', fontWeight: '800', color: '#3b82f6', textTransform: 'uppercase' }}>Update</div>
                                   <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#475569', lineHeight: '1.4' }}>{n.message}</p>
@@ -656,7 +722,7 @@ const TMDashboard = ({ user, onLogout }) => {
            </div>
 
            {/* WELLNESS GAUGE */}
-           <div style={premiumCard}>
+           <div style={{ ...premiumCard, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <h3 style={sectionTitlePremium}> Wellness & Capacity</h3>
               <div style={{display: 'flex', alignItems: 'center', gap: '20px', marginTop: '15px'}}>
                  <div style={{width: '100px', height: '100px', borderRadius: '50%', background: `conic-gradient(${wellnessColor} ${utilization * 100}%, #f1f5f9 0)`, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
@@ -683,6 +749,31 @@ const TMDashboard = ({ user, onLogout }) => {
                  </div>
               </div>
            </div>
+        </div>
+
+        {/* PROJECT FTE HIGHLIGHTS */}
+        <div style={{ padding: '0 25px 0 25px', display: 'flex', gap: '20px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: '#fff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🏢</div>
+                <div>
+                    <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase' }}>Project Overall Assigned FTE</div>
+                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1B3A6B' }}>{stats.project_total_fte !== undefined ? stats.project_total_fte : 'Loading...'}</div>
+                </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: '#fff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>👤</div>
+                <div>
+                    <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase' }}>My Assigned FTE</div>
+                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10B981' }}>{stats.user_project_fte !== undefined ? stats.user_project_fte : 'Loading...'}</div>
+                </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: '#fff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🔥</div>
+                <div>
+                    <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase' }}>My Utilized FTE</div>
+                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#F59E0B' }}>{stats.fte_score !== undefined ? stats.fte_score : 'Loading...'}</div>
+                </div>
+            </div>
         </div>
 
         {/* ANALYTICS & TIMELINES */}
