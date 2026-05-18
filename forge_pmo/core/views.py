@@ -1416,3 +1416,217 @@ def review_additional_sprint(request):
         return Response({"error": "Sprint not found"}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+
+# --- AUTOMATED PROGRAM BULK IMPORT ENDPOINTS ---
+# pyrefly: ignore [untyped-import]
+import pandas as pd
+from datetime import datetime, date
+
+@api_view(['POST'])
+def parse_program_import(request):
+    try:
+        uploaded_file = request.FILES.get('file')
+        if not uploaded_file:
+            return Response({"success": False, "error": "No file uploaded"}, status=400)
+        
+        file_name = uploaded_file.name.lower()
+        if file_name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        elif file_name.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(uploaded_file)
+        else:
+            return Response({"success": False, "error": "Unsupported file format. Please upload CSV or Excel (.xlsx/.xls) file."}, status=400)
+        
+        # Standardize column names to lower case and strip whitespace
+        df.columns = [str(c).strip().lower().replace(' ', '_') for c in df.columns]
+        
+        # Column mappings (to support flexible formats)
+        col_mappings = {
+            'name': ['program_name', 'name', 'title', 'program'],
+            'description': ['description', 'desc', 'details', 'about'],
+            'start_date': ['start_date', 'start', 'startdate'],
+            'end_date': ['end_date', 'end', 'enddate']
+        }
+        
+        # Helper to find column matching any alias
+        def find_col(aliases):
+            for alias in aliases:
+                if alias in df.columns:
+                    return alias
+            return None
+        
+        name_col = find_col(col_mappings['name'])
+        desc_col = find_col(col_mappings['description'])
+        start_col = find_col(col_mappings['start_date'])
+        end_col = find_col(col_mappings['end_date'])
+        
+        parsed_records = []
+        existing_program_names = set(Program.objects.values_list('name', flat=True))
+        seen_names_in_file = set()
+        
+        for idx, row in df.iterrows():
+            errors = []
+            
+            # 1. Parse Name
+            raw_name = row.get(name_col) if name_col else None
+            name = str(raw_name).strip() if pd.notna(raw_name) else ""
+            
+            if not name:
+                errors.append("Program Name is required.")
+            else:
+                # Check DB duplicate
+                if name in existing_program_names:
+                    errors.append(f"Program '{name}' already exists in database.")
+                # Check file duplicate
+                if name in seen_names_in_file:
+                    errors.append(f"Program Name '{name}' is duplicated within this file.")
+                seen_names_in_file.add(name)
+            
+            # 2. Parse Description
+            raw_desc = row.get(desc_col) if desc_col else None
+            description = str(raw_desc).strip() if pd.notna(raw_desc) else ""
+            
+            # 3. Parse Dates
+            raw_start = row.get(start_col) if start_col else None
+            raw_end = row.get(end_col) if end_col else None
+            
+            start_date_str = None
+            end_date_str = None
+            
+            # Date format helper
+            def parse_date(val):
+                if pd.isna(val):
+                    return None, None
+                # If Excel parsed it as datetime
+                if isinstance(val, (datetime, date, pd.Timestamp)):
+                    # Convert to datetime date
+                    if hasattr(val, 'date'):
+                        d = val.date()
+                    else:
+                        d = val
+                    return d.strftime('%Y-%m-%d'), None
+                
+                # If String representation
+                val_str = str(val).strip()
+                if not val_str or val_str.lower() in ('nat', 'none', 'null', 'nan'):
+                    return None, None
+                
+                for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y', '%d/%m/%Y', '%Y/%m/%d', '%b %d, %Y', '%d %b %Y'):
+                    try:
+                        parsed_dt = datetime.strptime(val_str, fmt).date()
+                        return parsed_dt.strftime('%Y-%m-%d'), None
+                    except ValueError:
+                        continue
+                return None, f"Invalid date format '{val_str}'"
+            
+            start_date_str, start_err = parse_date(raw_start)
+            if start_err:
+                errors.append(f"Start Date: {start_err}")
+                
+            end_date_str, end_err = parse_date(raw_end)
+            if end_err:
+                errors.append(f"End Date: {end_err}")
+                
+            # Chronological check if dates are valid
+            if start_date_str and end_date_str and not (start_err or end_err):
+                try:
+                    s_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                    e_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                    if s_date > e_date:
+                        errors.append("End date must be on or after start date.")
+                except Exception:
+                    pass
+            
+            is_valid = len(errors) == 0
+            
+            parsed_records.append({
+                "row_index": idx + 1,
+                "name": name,
+                "description": description,
+                "start_date": start_date_str,
+                "end_date": end_date_str,
+                "is_valid": is_valid,
+                "errors": errors
+            })
+            
+        summary = {
+            "total_records": len(parsed_records),
+            "valid_records": sum(1 for r in parsed_records if r["is_valid"]),
+            "invalid_records": sum(1 for r in parsed_records if not r["is_valid"])
+        }
+        
+        return Response({
+            "success": True,
+            "records": parsed_records,
+            "summary": summary
+        })
+        
+    except Exception as e:
+        logger.error(f"PARSE PROGRAM IMPORT ERROR: {str(e)}")
+        return Response({"success": False, "error": f"Failed to parse file: {str(e)}"}, status=400)
+
+
+@api_view(['POST'])
+def commit_program_import(request):
+    try:
+        programs_data = request.data.get('programs', [])
+        if not programs_data:
+            return Response({"success": False, "error": "No program data provided to import"}, status=400)
+        
+        created_programs = []
+        errors = []
+        
+        with transaction.atomic():
+            for idx, p in enumerate(programs_data):
+                name = p.get('name', '').strip()
+                description = p.get('description', '').strip()
+                start_date_str = p.get('start_date')
+                end_date_str = p.get('end_date')
+                
+                if not name:
+                    errors.append(f"Row {idx+1}: Program Name is missing.")
+                    continue
+                
+                # Check DB duplicate inside transaction (safety check)
+                if Program.objects.filter(name=name).exists():
+                    errors.append(f"Row {idx+1}: Program '{name}' already exists in database.")
+                    continue
+                
+                start_date = None
+                end_date = None
+                if start_date_str:
+                    try:
+                        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
+                
+                if end_date_str:
+                    try:
+                        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
+                
+                program = Program.objects.create(
+                    name=name,
+                    description=description,
+                    start_date=start_date,
+                    end_date=end_date,
+                    status='Pending'
+                )
+                
+                created_programs.append({
+                    "id": program.id,
+                    "name": program.name
+                })
+        
+        return Response({
+            "success": True,
+            "created_count": len(created_programs),
+            "created": created_programs,
+            "errors": errors
+        })
+        
+    except Exception as e:
+        logger.error(f"COMMIT PROGRAM IMPORT ERROR: {str(e)}")
+        return Response({"success": False, "error": f"Failed to commit import: {str(e)}"}, status=400)

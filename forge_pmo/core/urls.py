@@ -14,6 +14,8 @@ urlpatterns = [
     path('all-programs/', views.get_all_programs, name='all-programs'),
     path('create-program/', views.create_program, name='create_program'),
     path('update-program-status/', views.update_program_status, name='update_status'),
+    path('parse-program-import/', views.parse_program_import, name='parse_program_import'),
+    path('commit-program-import/', views.commit_program_import, name='commit_program_import'),
 
 
     path('my-assigned-programs/', views.my_assigned_programs, name='my_assigned_programs'),
