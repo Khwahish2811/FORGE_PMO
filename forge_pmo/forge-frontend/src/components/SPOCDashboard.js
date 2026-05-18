@@ -464,7 +464,7 @@ const SPOCDashboard = ({ username, onLogout }) => {
                                         <td style={{ padding: '15px 10px', fontSize: '13px', color: '#334155' }}>
                                             <div style={{ fontWeight: 'bold', color: '#1e293b' }}>{proj.sprint_name}</div>
                                             <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                📅 Due: {proj.sprint_due_date}
+                                                Due: {proj.sprint_due_date}
                                             </div>
                                         </td>
                                         {/* Last Task Worked On */}

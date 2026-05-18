@@ -50,13 +50,13 @@ const ProgramManagement = () => {
 
                       {/* Project Team Section */}
                       <div style={boxStyle}>
-                        <div style={boxTitle}>👥 Project Team</div>
+                        <div style={boxTitle}>Project Team</div>
                         {/* Team members render here */}
                       </div>
 
                       {/* Sprint Timeline Section - Sahi Logic Idhar Hai */}
                       <div style={boxStyle}>
-                        <div style={boxTitle}>📅 Sprint Timeline</div>
+                        <div style={boxTitle}>Sprint Timeline</div>
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr style={{ textAlign: 'left', fontSize: '11px', color: '#666' }}>

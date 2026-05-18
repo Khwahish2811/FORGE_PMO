@@ -356,7 +356,9 @@ const PGMDashboard = ({ username, onLogout }) => {
         {/* HEADER */}
         <div style={headerStyle}>
           <span style={{ fontWeight: 700, color: '#1B3A6B' }}>
-            {activeTab === 'dashboard' ? 'Program Manager Dashboard' : 'Working Programs Control'}
+            {activeTab === 'dashboard' ? 'Program Manager Dashboard' : 
+             activeTab === 'resource_analytics' ? 'Resource Analytics & Performance' :
+             'Working Programs Control'}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer' }} onClick={() => setShowProfileModal(true)}>
             <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
@@ -503,7 +505,7 @@ const PGMDashboard = ({ username, onLogout }) => {
               </div>
             </div>
           </>
-        ) : (
+        ) : activeTab === 'working' ? (
           /* WORKING PROGRAMS TAB */
           <div style={{ padding: '25px' }}>
             <h3 style={{ ...sectionTitle, marginBottom: '20px', fontSize: '18px' }}> Programs Currently in Execution</h3>
@@ -569,8 +571,7 @@ const PGMDashboard = ({ username, onLogout }) => {
               </table>
             </div>
           </div>
-        )}
-      </div>
+        ) : null}
 
 
       {/* RESOURCE PERFORMANCE & ANALYTICS OPERATION VIEW */}
@@ -1126,7 +1127,7 @@ const PGMDashboard = ({ username, onLogout }) => {
             </div>
             <div style={{ padding: '30px' }}>
               <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: '12px 15px', borderRadius: '8px', marginBottom: '20px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#b45309' }}>⚡ Project Status: IN PROGRESS</span>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#b45309' }}>Project Status: IN PROGRESS</span>
                 <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#92400e', lineHeight: '1.4' }}>This project has already started. This is a request from the Project Manager (<b>{selectedSprintReview?.pm_username}</b>) to add a new sprint to the timeline.</p>
               </div>
 
@@ -1197,6 +1198,7 @@ const PGMDashboard = ({ username, onLogout }) => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

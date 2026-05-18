@@ -440,7 +440,8 @@ def get_kanban_tasks(request):
                 "sprint_deadline": spr.end_date.strftime('%Y-%m-%d') if (spr and spr.end_date) else "No Date",
                 "priority": t.priority or "Medium",
                 "hours_logged": str(t.hours_logged or 0.00),
-                "due_date": t.due_date.strftime('%Y-%m-%d') if t.due_date else "No Date"
+                "due_date": t.due_date.strftime('%Y-%m-%d') if t.due_date else "No Date",
+                "program_document": prog.document.url if (prog and prog.document) else None
             })
         return Response(task_data, status=200)
     except Exception as e:
@@ -1335,8 +1336,9 @@ def request_additional_sprint(request):
         )
         
         # Notify Program Manager (PGM)
-        pgm_user = project.program.created_by
-        if pgm_user:
+        from django.contrib.auth.models import User
+        pgm_users = User.objects.filter(profile__role='PGM')
+        for pgm_user in pgm_users:
             Notification.objects.create(
                 user=pgm_user,
                 message=f"NEW_SPRINT: Additional sprint '{name}' requested for active project '{project.name}' by PM."

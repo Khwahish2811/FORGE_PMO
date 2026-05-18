@@ -86,7 +86,8 @@ const TMDashboard = ({ user, onLogout }) => {
             projMap[item.project_name] = {
               name: item.project_name,
               pm: item.project_manager,
-              sprint: item.sprint_name
+              sprint: item.sprint_name,
+              program_document: item.program_document
             };
           }
         });
@@ -244,7 +245,7 @@ const TMDashboard = ({ user, onLogout }) => {
   const saveDailyLog = async () => {
     const taskIdsToUpdate = Object.keys(dailyInput).filter(id => dailyInput[id] > 0);
     if (taskIdsToUpdate.length === 0) {
-        showToast('⚠️ Please enter hours for at least one task.', 'warning');
+        showToast('Please enter hours for at least one task.', 'warning');
         return;
     }
     setLoading(true);
@@ -578,7 +579,7 @@ const TMDashboard = ({ user, onLogout }) => {
                                 onClick={() => toggleNode(`prog-${progName}`)} 
                                 style={{ background: '#f8fafc', padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '15px' }}>📁 Program: {progName}</span>
+                                    <span style={{ fontWeight: 'bold', color: '#1e293b', fontSize: '15px' }}>Program: {progName}</span>
                                     {notifications.some(n => Object.keys(projectsMap).some(p => n.message.includes(p))) && (
                                         <span style={{ background: '#ef4444', color: '#fff', fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '10px' }}>UPDATES INSIDE</span>
                                     )}
@@ -597,7 +598,7 @@ const TMDashboard = ({ user, onLogout }) => {
                                                     style={{ padding: '12px', background: '#f1f5f9', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                                                     onClick={() => toggleNode(`proj-${progName}-${projName}`)}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                                        <span style={{ fontWeight: 'bold', color: '#334155' }}>💼 Project: {projName}</span>
+                                                        <span style={{ fontWeight: 'bold', color: '#334155' }}>Project: {projName}</span>
                                                         {notifications.some(n => n.message.includes(projName)) && (
                                                             <span style={{ background: '#ef4444', color: '#fff', fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '10px' }}>NEW UPDATE</span>
                                                         )}
@@ -615,7 +616,7 @@ const TMDashboard = ({ user, onLogout }) => {
                                                                 <div 
                                                                     style={{ padding: '8px', background: '#e0e7ff', borderRadius: '6px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}
                                                                     onClick={() => toggleNode(`spr-${progName}-${projName}-${sprintName}`)}>
-                                                                    <span style={{ fontWeight: 'bold', color: '#3730a3', fontSize: '13px' }}>🏃 Sprint: {sprintName}</span>
+                                                                    <span style={{ fontWeight: 'bold', color: '#3730a3', fontSize: '13px' }}>Sprint: {sprintName}</span>
                                                                     <span>{expandedNodes[`spr-${progName}-${projName}-${sprintName}`] ? '▼' : '▶'}</span>
                                                                 </div>
                                                                 {expandedNodes[`spr-${progName}-${projName}-${sprintName}`] && (
@@ -651,13 +652,65 @@ const TMDashboard = ({ user, onLogout }) => {
             <>
               {stats.latest_update_note && (
                   <div style={{ margin: '25px 25px 0 25px', padding: '15px 20px', borderRadius: '12px', background: 'linear-gradient(135deg, #1B3A6B 0%, #1e40af 100%)', boxShadow: '0 4px 12px rgba(27,58,107,0.15)', display: 'flex', alignItems: 'center', gap: '15px', color: '#fff' }}>
-                      <div style={{ fontSize: '24px' }}>📢</div>
+                      <div style={{ fontSize: '14px', fontWeight: 'bold', background: 'rgba(255,255,255,0.2)', padding: '4px 10px', borderRadius: '8px' }}>ANNOUNCEMENT</div>
                       <div>
                           <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.8 }}>Latest Announcement from PM</div>
                           <p style={{ margin: '5px 0 0 0', fontSize: '14px', fontWeight: '500', lineHeight: '1.5' }}>"{stats.latest_update_note}"</p>
                       </div>
                   </div>
               )}
+              {(() => {
+                const selectedProj = projects.find(p => p.name === selectedProjectId);
+                if (selectedProj && selectedProj.program_document) {
+                  const absoluteDocUrl = selectedProj.program_document.startsWith('http') 
+                    ? selectedProj.program_document 
+                    : `http://127.0.0.1:8000${selectedProj.program_document}`;
+                  
+                  return (
+                    <div style={{ 
+                      margin: '25px 25px 0 25px', 
+                      padding: '20px', 
+                      borderRadius: '16px', 
+                      background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)', 
+                      border: '1px solid #BFDBFE', 
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.05)', 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center' 
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <div style={{ width: '45px', height: '45px', borderRadius: '50%', background: '#3B82F6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 'bold' }}>
+                          Doc
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Project Reference Document</div>
+                          <h4 style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#1E3A8A', fontWeight: 'bold' }}>Reference document for {selectedProjectId} is available.</h4>
+                        </div>
+                      </div>
+                      <a 
+                        href={absoluteDocUrl} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        style={{ 
+                          background: '#2563EB', 
+                          color: '#fff', 
+                          textDecoration: 'none', 
+                          padding: '10px 20px', 
+                          borderRadius: '8px', 
+                          fontWeight: 'bold', 
+                          fontSize: '13px', 
+                          boxShadow: '0 4px 6px rgba(37, 99, 235, 0.2)', 
+                          transition: '0.2s',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Download Document
+                      </a>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
         <div style={{display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '25px', padding: '25px', alignItems: 'stretch'}}>
            {/* SMART AGENDA */}
            <div style={{ ...premiumCard, display: 'flex', flexDirection: 'column' }}>
@@ -753,26 +806,17 @@ const TMDashboard = ({ user, onLogout }) => {
 
         {/* PROJECT FTE HIGHLIGHTS */}
         <div style={{ padding: '0 25px 0 25px', display: 'flex', gap: '20px', marginBottom: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: '#fff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🏢</div>
-                <div>
-                    <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase' }}>Project Overall Assigned FTE</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1B3A6B' }}>{stats.project_total_fte !== undefined ? stats.project_total_fte : 'Loading...'}</div>
-                </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', background: '#fff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', borderLeft: '4px solid #3B82F6', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', flex: 1 }}>
+                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase' }}>Project Overall Assigned FTE</div>
+                <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1B3A6B' }}>{stats.project_total_fte !== undefined ? stats.project_total_fte : 'Loading...'}</div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: '#fff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>👤</div>
-                <div>
-                    <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase' }}>My Assigned FTE</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10B981' }}>{stats.user_project_fte !== undefined ? stats.user_project_fte : 'Loading...'}</div>
-                </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', background: '#fff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', borderLeft: '4px solid #10B981', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', flex: 1 }}>
+                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase' }}>My Assigned FTE</div>
+                <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10B981' }}>{stats.user_project_fte !== undefined ? stats.user_project_fte : 'Loading...'}</div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: '#fff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🔥</div>
-                <div>
-                    <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase' }}>My Utilized FTE</div>
-                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#F59E0B' }}>{stats.fte_score !== undefined ? stats.fte_score : 'Loading...'}</div>
-                </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', background: '#fff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', borderLeft: '4px solid #F59E0B', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', flex: 1 }}>
+                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase' }}>My Utilized FTE</div>
+                <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#F59E0B' }}>{stats.fte_score !== undefined ? stats.fte_score : 'Loading...'}</div>
             </div>
         </div>
 
@@ -884,26 +928,26 @@ const TMDashboard = ({ user, onLogout }) => {
                           gap: '8px'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>📁 Program:</span>
+                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>Program:</span>
                             <span style={{ color: '#1B3A6B', fontWeight: 'bold', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.program_name}>{task.program_name}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>💼 Project:</span>
+                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>Project:</span>
                             <span style={{ color: '#334155', fontWeight: '700', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.project_name}>{task.project_name}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>👤 PM:</span>
+                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>PM:</span>
                             <span style={{ color: '#2563EB', fontWeight: 'bold' }}>{task.project_manager}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '4px' }}>
-                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>📅 Sprint End:</span>
+                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>Sprint End:</span>
                             <span style={{ color: '#ef4444', fontWeight: 'bold' }}>{task.sprint_deadline}</span>
                           </div>
                         </div>
 
                         <div style={{fontSize: '11px', color: '#64748B', marginTop: '12px', display: 'flex', justifyContent: 'space-between'}}>
-                           <span>📅 Task Due: {task.due_date}</span>
-                           <span>⏱ {task.hours_logged || 0}h logged</span>
+                           <span>Task Due: {task.due_date}</span>
+                           <span>{task.hours_logged || 0}h logged</span>
                         </div>
 
                         <div style={cardActions}>
@@ -936,7 +980,7 @@ const TMDashboard = ({ user, onLogout }) => {
             <div style={effortWidget}>
                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
                   <div>
-                     <h3 style={{margin: '0 0 5px 0', color: '#1B3A6B', fontSize: '18px'}}>⏱ Daily Effort Log</h3>
+                     <h3 style={{margin: '0 0 5px 0', color: '#1B3A6B', fontSize: '18px'}}>Daily Effort Log</h3>
                      <p style={{margin: 0, fontSize: '13px', color: '#64748b'}}>Log your hours against active tasks for today.</p>
                   </div>
                   <button onClick={saveDailyLog} style={btnSaveLog} disabled={loading}>
