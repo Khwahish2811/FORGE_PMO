@@ -98,11 +98,11 @@ const SPOCDashboard = ({ username, onLogout }) => {
         body: JSON.stringify({ id: programId, status: newStatus })
       });
       if (response.ok) {
-        showToast(`✅ Program ${newStatus} successfully!`, newStatus === 'Approved' ? 'success' : 'warning');
+        showToast(` Program ${newStatus} successfully!`, newStatus === 'Approved' ? 'success' : 'warning');
         fetchData();
       }
     } catch (err) {
-      showToast('❌ Backend error! Please try again.', 'error');
+      showToast(' Backend error! Please try again.', 'error');
     }
   };
 
@@ -141,7 +141,7 @@ const SPOCDashboard = ({ username, onLogout }) => {
 
   const downloadDocument = async (docPath) => {
     if (!docPath || docPath === "null" || docPath === "undefined") {
-      showToast('⚠️ No document was uploaded for this program.', 'warning');
+      showToast(' No document was uploaded for this program.', 'warning');
       return;
     }
     const backendBase = window.location.origin.includes('3000') 
@@ -214,7 +214,7 @@ const SPOCDashboard = ({ username, onLogout }) => {
                         <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px', lineHeight: '1.5' }}>{profileData.bio}</div>
                     </div>
                     <div style={{ marginTop: '10px', padding: '12px', background: '#FEF3C7', color: '#92400E', borderRadius: '8px', fontSize: '12px', border: '1px solid #FDE68A', textAlign: 'center' }}>
-                        ℹ️ Profile details are managed by HR/Admin and cannot be edited.
+                         Profile details are managed by HR/Admin and cannot be edited.
                     </div>
                 </div>
             </div>
@@ -235,19 +235,19 @@ const SPOCDashboard = ({ username, onLogout }) => {
       )}
       {/* SIDEBAR */}
       <div style={{ ...sidebarStyle, width: '260px', display: 'flex', flexDirection: 'column', height: '100vh', borderRight: '1px solid #1e293b' }}>
-        <div style={logoBox}>🚀 FORGE PMO</div>
+        <div style={logoBox}> FORGE PMO</div>
         
         <div style={{ padding: '20px 25px 8px 25px', fontSize: '11px', color: '#88a3d4', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
           Program Workflow
         </div>
-        <div onClick={() => setActiveTab('pending')} style={activeTab === 'pending' ? activeSbItem : sbItem}>📥 Pending Requests</div>
-        <div onClick={() => setActiveTab('history')} style={activeTab === 'history' ? activeSbItem : sbItem}>📋 Approval History</div>
-        <div onClick={() => setActiveTab('reports')} style={activeTab === 'reports' ? activeSbItem : sbItem}>⚡ Live Tracking</div>
+        <div onClick={() => setActiveTab('pending')} style={activeTab === 'pending' ? activeSbItem : sbItem}> Pending Requests</div>
+        <div onClick={() => setActiveTab('history')} style={activeTab === 'history' ? activeSbItem : sbItem}> Approval History</div>
+        <div onClick={() => setActiveTab('reports')} style={activeTab === 'reports' ? activeSbItem : sbItem}> Live Tracking</div>
 
         <div style={{ padding: '25px 25px 8px 25px', fontSize: '11px', color: '#88a3d4', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
           Resource Operations
         </div>
-        <div onClick={() => setActiveTab('resource_analytics')} style={activeTab === 'resource_analytics' ? activeSbItem : sbItem}>📊 Resource Analytics</div>
+        <div onClick={() => setActiveTab('resource_analytics')} style={activeTab === 'resource_analytics' ? activeSbItem : sbItem}> Resource Analytics</div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
@@ -289,7 +289,7 @@ const SPOCDashboard = ({ username, onLogout }) => {
         {activeTab !== 'resource_analytics' && (
           <div style={{ padding: '20px' }}>
             <h3 style={sectionTitle}>
-              {activeTab === 'pending' ? '📥 New Program Requests' : activeTab === 'reports' ? '🚀 Real-time Program Tracking' : '📋 Approval History'}
+              {activeTab === 'pending' ? ' New Program Requests' : activeTab === 'reports' ? ' Real-time Program Tracking' : ' Approval History'}
             </h3>
 
             <div style={tableContainer}>
@@ -328,16 +328,16 @@ const SPOCDashboard = ({ username, onLogout }) => {
                           <div style={{ display: 'flex', gap: '8px' }}>
                             {activeTab === 'pending' ? (
                               <>
-                                <button onClick={() => downloadDocument(pgm.document)} style={btnDoc}>📄 Doc</button>
+                                <button onClick={() => downloadDocument(pgm.document)} style={btnDoc}> Doc</button>
                                 <button onClick={() => handleAction(pgm.id, 'Approved')} style={btnApprove}>Approve</button>
                                 <button onClick={() => handleAction(pgm.id, 'Rejected')} style={btnReject}>Reject</button>
                               </>
                             ) : activeTab === 'reports' ? (
                               <button onClick={() => handleLiveTrack(pgm.id)} style={{ ...btnApprove, background: '#8b5cf6' }}>
-                                Track Progress 📊
+                                Track Progress 
                               </button>
                             ) : (
-                              <button onClick={() => downloadDocument(pgm.document)} style={btnHistoryDoc}>📄 Download Doc</button>
+                              <button onClick={() => downloadDocument(pgm.document)} style={btnHistoryDoc}> Download Doc</button>
                             )}
                           </div>
                         </td>
@@ -352,235 +352,6 @@ const SPOCDashboard = ({ username, onLogout }) => {
           </div>
         )}
 
-        {/* RESOURCE PERFORMANCE & ANALYTICS OPERATION VIEW */}
-        {activeTab === 'resource_analytics' && (
-          <div style={{ padding: '25px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <div>
-                <h3 style={{ margin: 0, color: '#1B3A6B', fontSize: '20px', fontWeight: '800' }}>📊 Resource Analytics & Performance Operations</h3>
-                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Real-time oversight of Program Managers, Project Managers, and Team Members.</p>
-              </div>
-              
-              {/* Directory Filter controls */}
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <input 
-                  type="text" 
-                  placeholder="🔍 Search resources..." 
-                  style={{ ...inp, width: '220px', padding: '8px 12px', height: '36px', boxSizing: 'border-box' }}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <select 
-                  style={{ ...inp, width: '150px', padding: '8px 12px', height: '36px', boxSizing: 'border-box' }}
-                  value={roleFilter}
-                  onChange={(e) => setRoleFilter(e.target.value)}
-                >
-                  <option value="All">All Roles</option>
-                  <option value="PGM">Program Managers</option>
-                  <option value="PM">Project Managers</option>
-                  <option value="TM">Team Members</option>
-                </select>
-              </div>
-            </div>
-
-            {/* RESOURCE ANALYTICS STAT CARDS */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '25px' }}>
-              <div style={{ ...summCard(false), textAlign: 'left', padding: '20px', borderLeft: '5px solid #2563EB', cursor: 'default' }}>
-                <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>Total Team Size</div>
-                <div style={{ fontSize: '24px', fontWeight: '800', color: '#1B3A6B' }}>{resources.length}</div>
-                <span style={{ fontSize: '10px', color: '#64748b' }}>Registered workforce</span>
-              </div>
-              <div style={{ ...summCard(false), textAlign: 'left', padding: '20px', borderLeft: '5px solid #10B981', cursor: 'default' }}>
-                <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>Avg Utilization</div>
-                <div style={{ fontSize: '24px', fontWeight: '800', color: '#10B981' }}>
-                  {resources.filter(r => r.role === 'TM').length > 0 ? (resources.filter(r => r.role === 'TM').reduce((sum, r) => sum + r.assigned_fte, 0) / resources.filter(r => r.role === 'TM').length * 100).toFixed(1) : 0}%
-                </div>
-                <span style={{ fontSize: '10px', color: '#64748b' }}>Active workload capacity</span>
-              </div>
-              <div style={{ ...summCard(false), textAlign: 'left', padding: '20px', borderLeft: '5px solid #F59E0B', cursor: 'default' }}>
-                <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>Underutilized staff</div>
-                <div style={{ fontSize: '24px', fontWeight: '800', color: '#F59E0B' }}>
-                  {resources.filter(r => r.role === 'TM' && r.assigned_fte < 0.5).length}
-                </div>
-                <span style={{ fontSize: '10px', color: '#64748b' }}>FTE allocation under 0.5</span>
-              </div>
-              <div style={{ ...summCard(false), textAlign: 'left', padding: '20px', borderLeft: '5px solid #EF4444', cursor: 'default' }}>
-                <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>Hire Alerts</div>
-                <div style={{ fontSize: '24px', fontWeight: '800', color: '#EF4444' }}>
-                  {resources.filter(r => r.assigned_fte > 1.0).length > 0 ? `${resources.filter(r => r.assigned_fte > 1.0).length} Overloaded` : '0 Gaps'}
-                </div>
-                <span style={{ fontSize: '10px', color: '#64748b' }}>Resources exceeding 1.0 FTE</span>
-              </div>
-            </div>
-
-            {/* RESOURCE GAP & DEMAND WARNINGS (Hire Alerts) */}
-            {resources.filter(r => r.assigned_fte > 1.0).length > 0 && (
-              <div style={{
-                background: 'linear-gradient(135deg, #fef2f2, #fee2e2)',
-                border: '1px solid #fca5a5',
-                borderLeft: '5px solid #ef4444',
-                padding: '15px 20px',
-                borderRadius: '12px',
-                marginBottom: '25px',
-                boxShadow: '0 4px 6px rgba(239,68,68,0.05)'
-              }}>
-                <h5 style={{ margin: '0 0 8px 0', color: '#991b1b', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  ⚠️ Critical Capacity & Hiring Demand Alerts
-                </h5>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  {resources.filter(r => r.assigned_fte > 1.0).map((r, idx) => (
-                    <div key={idx} style={{ fontSize: '12px', color: '#7f1d1d', fontWeight: '600' }}>
-                      • Overload Alert: <b>{r.username}</b> (FTE <b>{r.assigned_fte}</b>) is currently overloaded! We recommend immediate hiring or reallocation of a new <b>{r.role_display}</b> resource to optimize program health.
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* REAL-TIME GRAPHS PANEL */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px', marginBottom: '25px' }}>
-              <div style={chartContainer}>
-                <h4 style={chartHeader}>📊 Planned vs Logged FTE Workload</h4>
-                <div style={{ height: 260 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={resources.filter(r => r.role === 'TM')}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="username" tick={{ fontSize: 10, fontWeight: 'bold' }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 11, fontWeight: 'bold' }} />
-                      <Bar dataKey="assigned_fte" name="Planned Assigned FTE" fill="#2563EB" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="calculated_fte" name="Calculated Effort FTE" fill="#10B981" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-              
-              <div style={chartContainer}>
-                <h4 style={chartHeader}>🏆 Top Resource Performance Analytics</h4>
-                <div style={{ height: 260 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={resources.slice(0, 5)}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="username" tick={{ fontSize: 10, fontWeight: 'bold' }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 11, fontWeight: 'bold' }} />
-                      <Bar dataKey="performance_score" name="Performance Score" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-
-            {/* INTERACTIVE RESOURCES DIRECTORY */}
-            <div style={tableContainer}>
-              <table style={tableStyle}>
-                <thead>
-                  <tr style={theadStyle}>
-                    <th style={thStyle}>Resource Name</th>
-                    <th style={thStyle}>Role</th>
-                    <th style={thStyle}>Assigned FTE</th>
-                    <th style={thStyle}>Calculated FTE</th>
-                    <th style={thStyle}>Task Progress</th>
-                    <th style={thStyle}>Utilization Status</th>
-                    <th style={thStyle}>Performance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resources.filter(r => {
-                    const matchesSearch = r.username.toLowerCase().includes(searchQuery.toLowerCase());
-                    const matchesRole = roleFilter === 'All' || r.role === roleFilter;
-                    return matchesSearch && matchesRole;
-                  }).map((r) => {
-                    const isExpanded = expandedResource === r.username;
-                    const completionRate = r.completion_rate;
-                    
-                    return (
-                      <React.Fragment key={r.username}>
-                        <tr style={{ ...trStyle, cursor: 'pointer', backgroundColor: isExpanded ? '#f8fafc' : 'transparent' }} onClick={() => setExpandedResource(isExpanded ? null : r.username)}>
-                          <td style={tdStyle}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>
-                                {r.username.substring(0, 2).toUpperCase()}
-                              </div>
-                              <div>
-                                <span style={{ fontWeight: 'bold', color: '#1E293B', textDecoration: 'underline' }}>{r.username}</span>
-                                <div style={{ fontSize: '10px', color: '#64748B' }}>{r.email}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td style={tdStyle}>
-                            <span style={{ fontSize: '11px', background: '#f1f5f9', color: '#475569', padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold' }}>
-                              {r.role_display}
-                            </span>
-                          </td>
-                          <td style={tdStyle}>
-                            <span style={{ fontWeight: 'bold', color: '#1E40AF' }}>{r.assigned_fte.toFixed(2)} FTE</span>
-                          </td>
-                          <td style={tdStyle}>
-                            <span style={{ fontWeight: 'bold', color: '#10B981' }}>{r.calculated_fte.toFixed(2)} FTE</span>
-                          </td>
-                          <td style={{ ...tdStyle, width: '150px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ flex: 1, height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                                <div style={{ width: `${completionRate}%`, height: '100%', background: '#8B5CF6' }}></div>
-                              </div>
-                              <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>{Math.round(completionRate)}%</span>
-                            </div>
-                            <div style={{ fontSize: '9px', color: '#64748b', marginTop: '2px' }}>{r.completed_tasks}/{r.total_tasks} Tasks Completed</div>
-                          </td>
-                          <td style={tdStyle}>
-                            <span style={{
-                              padding: '5px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold',
-                              backgroundColor: r.utilization_status === 'Overutilized' ? '#FEE2E2' : r.utilization_status === 'Optimal' ? '#DCFCE7' : r.utilization_status === 'Underutilized' ? '#FEF3C7' : '#E0F2FE',
-                              color: r.utilization_status === 'Overutilized' ? '#991B1B' : r.utilization_status === 'Optimal' ? '#166534' : r.utilization_status === 'Underutilized' ? '#92400E' : '#0369A1'
-                            }}>
-                              {r.utilization_status.toUpperCase()}
-                            </span>
-                          </td>
-                          <td style={tdStyle}>
-                            <span style={{ background: '#F5F3FF', color: '#5B21B6', padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold' }}>
-                              ⭐ {r.performance_score}
-                            </span>
-                          </td>
-                        </tr>
-                        
-                        {isExpanded && (
-                          <tr>
-                            <td colSpan="7" style={{ padding: '15px 25px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }}>
-                                <div style={{ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                                  <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#1B3A6B', fontWeight: 'bold' }}>📁 Active Project Assignments</h5>
-                                  {r.active_projects.length > 0 ? (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                      {r.active_projects.map((projName, idx) => (
-                                        <span key={idx} style={{ background: '#EFF6FF', color: '#2563EB', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', border: '1px solid #BFDBFE' }}>
-                                          💼 {projName}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>No active project assignments. Ready for tasking!</span>
-                                  )}
-                                </div>
-                                <div style={{ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                                  <h5 style={{ margin: '0 0 5px 0', fontSize: '13px', color: '#1B3A6B', fontWeight: 'bold' }}>📝 Bio & Profile Notes</h5>
-                                  <p style={{ margin: 0, fontSize: '12px', color: '#475569', lineHeight: 1.4 }}>{r.bio || "No biography provided. Contact staff directly for portfolio or capability details."}</p>
-                                  {r.phone && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '8px' }}>📞 Phone: <b>{r.phone}</b></div>}
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* LIVE TRACKER MODAL */}
@@ -660,7 +431,7 @@ const SPOCDashboard = ({ username, onLogout }) => {
             {/* --- Real-time Project Breakdown Section (NEW addition for all dashboards) --- */}
             <div style={{ marginTop: '25px', padding: '20px', background: '#fff', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
                 <h5 style={{ marginBottom: '15px', fontWeight: 'bold', color: '#1B3A6B', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    🚀 Real-Time Project Execution Status
+                     Real-Time Project Execution Status
                     <span className="pulse-dot" style={{ display: 'inline-block', width: '8px', height: '8px', background: '#10b981', borderRadius: '50%' }}></span>
                 </h5>
                 

@@ -19,6 +19,7 @@ urlpatterns = [
     path('my-assigned-programs/', views.my_assigned_programs, name='my_assigned_programs'),
     path('get-team-members/', views.get_team_members, name='get_team_members'),
     path('approve-project-plan/', views.approve_project_plan, name='approve_project_plan'),
+    path('start-project-execution/', views.start_project_execution, name='start_project_execution'),
     path('get-active-projects/', views.get_active_projects, name='get_active_projects'),
     path('get-tm-projects/', views.get_tm_projects, name='get_tm_projects'),
 
@@ -45,4 +46,8 @@ path('update-sprint-status/', views.update_sprint_status, name='update_sprint_st
     path('mark-notifications-read/', views.mark_notifications_read, name='mark_notifications_read'),
     path('get-team-performance/', views.get_team_performance, name='get_team_performance'),
     path('get-all-resources/', views.get_all_resources, name='get_all_resources'),
+    path('post-project-update-note/', views.post_project_update_note, name='post_project_update_note'),
+    path('request-additional-sprint/', views.request_additional_sprint, name='request_additional_sprint'),
+    path('get-pending-additional-sprints/', views.get_pending_additional_sprints, name='get_pending_additional_sprints'),
+    path('review-additional-sprint/', views.review_additional_sprint, name='review_additional_sprint'),
 ]

@@ -59,6 +59,8 @@ class Project(models.Model):
     status = models.CharField(max_length=50, default='Pending')
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
+    return_note = models.TextField(null=True, blank=True)
+    latest_update_note = models.TextField(null=True, blank=True)
 
     # pyrefly: ignore [bad-override]
     def __str__(self):

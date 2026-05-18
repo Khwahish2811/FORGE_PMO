@@ -1,21 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, LineChart, Line, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, LineChart, Line, CartesianGrid, Legend } from 'recharts';
 
 import { Gantt, ViewMode } from 'gantt-task-react';
 import "gantt-task-react/dist/index.css";
 
 // Helper function for health status colors
 const getStatusColor = (endDate) => {
-    if (!endDate) return '#cbd5e1';
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const deadline = new Date(endDate);
-    deadline.setHours(0, 0, 0, 0);
-    const diffTime = deadline - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    if (diffDays < 0) return '#ef4444'; // Red (Overdue)
-    if (diffDays <= 2) return '#f59e0b'; // Amber (Urgent)
-    return '#10b981'; // Green (On Track)
+  if (!endDate) return '#cbd5e1';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const deadline = new Date(endDate);
+  deadline.setHours(0, 0, 0, 0);
+  const diffTime = deadline - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return '#ef4444'; // Red (Overdue)
+  if (diffDays <= 2) return '#f59e0b'; // Amber (Urgent)
+  return '#10b981'; // Green (On Track)
 };
 
 const PGMDashboard = ({ username, onLogout }) => {
@@ -26,9 +26,14 @@ const PGMDashboard = ({ username, onLogout }) => {
   const [programs, setPrograms] = useState([]);
   const [pmList, setPmList] = useState([]);
   const [pendingProjects, setPendingProjects] = useState([]);
+  const [pendingSprints, setPendingSprints] = useState([]);
+  const [showSprintReviewModal, setShowSprintReviewModal] = useState(false);
+  const [selectedSprintReview, setSelectedSprintReview] = useState(null);
+  const [sprintReturnNote, setSprintReturnNote] = useState('');
   const [selectedReview, setSelectedReview] = useState(null);
   const [selectedPMs, setSelectedPMs] = useState({});
   const [formData, setFormData] = useState({ name: '', description: '', start_date: '', end_date: '' });
+
 
   // --- NEW STATES FOR NAVIGATION & TRACKING ---
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -38,7 +43,13 @@ const PGMDashboard = ({ username, onLogout }) => {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileData, setProfileData] = useState({ username: username, email: '', role: 'Program Manager', bio: '', phone: '' });
 
+  const [returnNote, setReturnNote] = useState('');
 
+  // --- RESOURCE ANALYTICS STATES ---
+  const [resources, setResources] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('All');
+  const [expandedResource, setExpandedResource] = useState(null);
   const showToast = (msg, type = 'success') => {
     setToastMessage({ msg, type });
     setTimeout(() => setToastMessage(null), 4000);
@@ -55,15 +66,67 @@ const PGMDashboard = ({ username, onLogout }) => {
 
       const pendingRes = await fetch('http://127.0.0.1:8000/api/get-pending-projects/');
       if (pendingRes.ok) {
-          const data = await pendingRes.json();
-          setPendingProjects(data);
+        const data = await pendingRes.json();
+        setPendingProjects(data);
       }
+      fetchPendingSprints();
     } catch (err) {
       console.error("Fetch fail:", err);
     }
   }, []);
 
+
+  const fetchPendingSprints = useCallback(async () => {
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/get-pending-additional-sprints/');
+      if (res.ok) setPendingSprints(await res.json());
+    } catch (err) { console.error("Error fetching pending sprints:", err); }
+  }, []);
+
+  const handleReviewSprintSubmit = async (decision) => {
+    if (decision === 'Returned' && !sprintReturnNote.trim()) {
+      showToast('Please provide feedback notes when returning a sprint.', 'error');
+      return;
+    }
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/review-additional-sprint/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sprint_id: selectedSprintReview.sprint_id,
+          decision: decision,
+          return_note: sprintReturnNote
+        })
+      });
+      if (res.ok) {
+        showToast(decision === 'Approved' ? 'Sprint approved successfully!' : 'Sprint returned to PM with notes.', 'success');
+        setShowSprintReviewModal(false);
+        setSprintReturnNote('');
+        fetchData();
+        fetchPendingSprints();
+      } else {
+        showToast('Failed to review sprint.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Server connection failed.', 'error');
+    }
+  };
+
+  const fetchResources = useCallback(async () => {
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/get-all-resources/');
+      if (res.ok) {
+        const data = await res.json();
+        setResources(data);
+      }
+    } catch (err) {
+      console.error("Resources fetch error:", err);
+    }
+  }, []);
+
   const fetchUserProfile = useCallback(async () => {
+
     try {
       const res = await fetch(`http://127.0.0.1:8000/api/get-user-profile/?username=${username}`);
       if (res.ok) setProfileData(await res.json());
@@ -73,51 +136,53 @@ const PGMDashboard = ({ username, onLogout }) => {
   useEffect(() => {
     fetchData();
     fetchUserProfile();
+    fetchResources();
     const interval = setInterval(() => {
-        fetchData();
+      fetchData();
+      fetchResources();
     }, 5000); // Auto refresh every 5 seconds
-    const handleFocus = () => { fetchData(); fetchUserProfile(); };
+    const handleFocus = () => { fetchData(); fetchUserProfile(); fetchResources(); };
     window.addEventListener('focus', handleFocus);
     return () => {
-        clearInterval(interval);
-        window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
     };
-  }, [fetchData, fetchUserProfile]);
+  }, [fetchData, fetchUserProfile, fetchResources]);
 
 
   // --- 2. Action Handlers (Original Functions Preserved) ---
   const handleAssignPM = async (programId) => {
     const pmId = selectedPMs[programId];
-    if (!pmId) { showToast('⚠️ Please select a PM first!', 'warning'); return; }
+    if (!pmId) { showToast(' Please select a PM first!', 'warning'); return; }
     try {
       const res = await fetch('http://127.0.0.1:8000/api/assign-pm/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ program_id: programId, pm_id: pmId, manager_name: username })
       });
-      if (res.ok) { 
-        showToast('✅ Project Manager assigned successfully!', 'success');
-        fetchData(); 
+      if (res.ok) {
+        showToast(' Project Manager assigned successfully!', 'success');
+        fetchData();
       }
-    } catch (err) { showToast('❌ Connection error. Please try again.', 'error'); }
+    } catch (err) { showToast(' Connection error. Please try again.', 'error'); }
   };
 
   const handleReviewAction = async (projectId, decision) => {
     try {
-        const response = await fetch('http://127.0.0.1:8000/api/approve-project-plan/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ project_id: projectId, decision: decision })
-        });
-        if (response.ok) {
-            showToast(`✅ Project ${decision === 'approve' ? 'Approved' : 'Rejected'} successfully!`, decision === 'approve' ? 'success' : 'warning');
-            setShowReviewModal(false);
-            fetchData();
-        } else {
-            const errorData = await response.json();
-            showToast('❌ Error: ' + (errorData.error || 'Action failed'), 'error');
-        }
-    } catch (err) { showToast('❌ Failed to connect to the server.', 'error'); }
+      const response = await fetch('http://127.0.0.1:8000/api/approve-project-plan/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId, decision: decision })
+      });
+      if (response.ok) {
+        showToast(` Project ${decision === 'approve' ? 'Approved' : 'Rejected'} successfully!`, decision === 'approve' ? 'success' : 'warning');
+        setShowReviewModal(false);
+        fetchData();
+      } else {
+        const errorData = await response.json();
+        showToast(' Error: ' + (errorData.error || 'Action failed'), 'error');
+      }
+    } catch (err) { showToast(' Failed to connect to the server.', 'error'); }
   };
 
   const handleCreateProgram = async (e) => {
@@ -135,30 +200,35 @@ const PGMDashboard = ({ username, onLogout }) => {
         body: data
       });
       if (res.ok) {
-        showToast('🚀 Program created successfully!', 'success');
+        showToast(' Program created successfully!', 'success');
         setShowModal(false);
         setFormData({ name: '', description: '', start_date: '', end_date: '', document: null });
         fetchData();
       }
-    } catch (err) { showToast('❌ Error connecting to server!', 'error'); }
+    } catch (err) { showToast(' Error connecting to server!', 'error'); }
   };
 
   const handleDecision = async (projectId, decision) => {
+    if (decision === 'return' && !returnNote.trim()) {
+      showToast('Please provide a reason for returning the project.', 'warning');
+      return;
+    }
     try {
       const response = await fetch('http://127.0.0.1:8000/api/approve-project-plan/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: projectId, decision: decision })
+        body: JSON.stringify({ project_id: projectId, decision: decision, return_note: returnNote })
       });
       const data = await response.json();
       if (data.success) {
-        showToast(`✅ ${data.message}`, decision === 'approve' ? 'success' : 'warning');
+        showToast(`${data.message}`, decision === 'approve' ? 'success' : 'warning');
         setShowReviewModal(false);
+        setReturnNote('');
         fetchData();
       }
     } catch (error) {
       console.error("Error:", error);
-      showToast('❌ Action failed! Please try again.', 'error');
+      showToast('Action failed! Please try again.', 'error');
     }
   };
 
@@ -171,10 +241,10 @@ const PGMDashboard = ({ username, onLogout }) => {
         setSelectedProgramStats(data);
         setShowTrackerModal(true);
       } else {
-        showToast('⚠️ Tracker data not available for this program.', 'warning');
+        showToast(' Tracker data not available for this program.', 'warning');
       }
     } catch (err) {
-      showToast('❌ Error fetching tracker data.', 'error');
+      showToast(' Error fetching tracker data.', 'error');
     } finally {
       setLoadingStats(false);
     }
@@ -206,40 +276,40 @@ const PGMDashboard = ({ username, onLogout }) => {
       {/* PROFILE MODAL */}
       {showProfileModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ background: '#fff', width: '450px', borderRadius: '24px', padding: '30px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.3)', position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
-                    <h2 style={{ margin: 0, color: '#1B3A6B' }}>User Profile</h2>
-                    <button onClick={() => setShowProfileModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748B' }}>✕</button>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '25px' }}>
-                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, #1e40af, #3b82f6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold' }}>
-                        {profileData.username?.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                        <h3 style={{ margin: '0 0 5px 0', fontSize: '20px', color: '#0F172A' }}>{profileData.username}</h3>
-                        <span style={{ background: '#EFF6FF', color: '#3B82F6', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '800' }}>{profileData.role}</span>
-                    </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Email Address</label>
-                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.email}</div>
-                    </div>
-                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Contact Number</label>
-                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.phone}</div>
-                    </div>
-                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Bio / About</label>
-                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px', lineHeight: '1.5' }}>{profileData.bio}</div>
-                    </div>
-                    <div style={{ marginTop: '10px', padding: '12px', background: '#FEF3C7', color: '#92400E', borderRadius: '8px', fontSize: '12px', border: '1px solid #FDE68A', textAlign: 'center' }}>
-                        ℹ️ Profile details are managed by HR/Admin and cannot be edited.
-                    </div>
-                </div>
+          <div style={{ background: '#fff', width: '450px', borderRadius: '24px', padding: '30px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.3)', position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
+              <h2 style={{ margin: 0, color: '#1B3A6B' }}>User Profile</h2>
+              <button onClick={() => setShowProfileModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748B' }}>✕</button>
             </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '25px' }}>
+              <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, #1e40af, #3b82f6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold' }}>
+                {profileData.username?.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <h3 style={{ margin: '0 0 5px 0', fontSize: '20px', color: '#0F172A' }}>{profileData.username}</h3>
+                <span style={{ background: '#EFF6FF', color: '#3B82F6', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '800' }}>{profileData.role}</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Email Address</label>
+                <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.email}</div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Contact Number</label>
+                <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.phone}</div>
+              </div>
+              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Bio / About</label>
+                <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px', lineHeight: '1.5' }}>{profileData.bio}</div>
+              </div>
+              <div style={{ marginTop: '10px', padding: '12px', background: '#FEF3C7', color: '#92400E', borderRadius: '8px', fontSize: '12px', border: '1px solid #FDE68A', textAlign: 'center' }}>
+                Profile details are managed by HR/Admin and cannot be edited.
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -262,28 +332,33 @@ const PGMDashboard = ({ username, onLogout }) => {
         <div style={logoBox}>F FORGE</div>
         <div style={sbSecTitle}>Navigation</div>
         <div
-            onClick={() => setActiveTab('dashboard')}
-            style={{ ...sbItem, backgroundColor: activeTab === 'dashboard' ? '#2563EB' : 'transparent', color: '#fff', fontWeight: activeTab === 'dashboard' ? 'bold' : 'normal' }}
+          onClick={() => setActiveTab('dashboard')}
+          style={{ ...sbItem, backgroundColor: activeTab === 'dashboard' ? '#2563EB' : 'transparent', color: '#fff', fontWeight: activeTab === 'dashboard' ? 'bold' : 'normal' }}
         >
-            📊 Dashboard
+          Dashboard
         </div>
         <div
-            onClick={() => setActiveTab('working')}
-            style={{ ...sbItem, backgroundColor: activeTab === 'working' ? '#2563EB' : 'transparent', color: '#fff', fontWeight: activeTab === 'working' ? 'bold' : 'normal' }}
+          onClick={() => setActiveTab('working')}
+          style={{ ...sbItem, backgroundColor: activeTab === 'working' ? '#2563EB' : 'transparent', color: '#fff', fontWeight: activeTab === 'working' ? 'bold' : 'normal' }}
         >
-            💼 Working Programs
+          Working Programs
         </div>
-        <div style={sbItem}>📈 Resource Tracker</div>
-        <div style={sbItem}>⚙️ Settings</div>
+        <div
+          onClick={() => setActiveTab('resource_analytics')}
+          style={{ ...sbItem, backgroundColor: activeTab === 'resource_analytics' ? '#2563EB' : 'transparent', color: '#fff', fontWeight: activeTab === 'resource_analytics' ? 'bold' : 'normal' }}
+        >
+          Resource Analytics
+        </div>
+        <div style={sbItem}> Settings</div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {/* HEADER */}
         <div style={headerStyle}>
           <span style={{ fontWeight: 700, color: '#1B3A6B' }}>
-              {activeTab === 'dashboard' ? 'Program Manager Dashboard' : 'Working Programs Control'}
+            {activeTab === 'dashboard' ? 'Program Manager Dashboard' : 'Working Programs Control'}
           </span>
-          <div style={{display:'flex', alignItems:'center', gap:'15px', cursor: 'pointer'}} onClick={() => setShowProfileModal(true)}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer' }} onClick={() => setShowProfileModal(true)}>
             <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
             <div style={{ width: '35px', height: '35px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', background: 'linear-gradient(135deg, #1e40af, #3b82f6)', color: '#fff', fontWeight: 'bold' }}>{username?.charAt(0).toUpperCase() || 'U'}</div>
             <button onClick={onLogout} style={logoutBtnStyle}>LOGOUT</button>
@@ -305,8 +380,8 @@ const PGMDashboard = ({ username, onLogout }) => {
               {/* 1. ACTION REQUIRED */}
               <div style={{ marginBottom: '35px' }}>
                 <div style={alertHeader}>
-                  <h3 style={{...sectionTitle, color: '#92400e'}}>⚠️ Action Required: Project Approvals</h3>
-                  <span style={{fontWeight:'bold'}}>{pendingProjects.length} Pending</span>
+                  <h3 style={{ ...sectionTitle, color: '#92400e' }}> Action Required: Project Approvals</h3>
+                  <span style={{ fontWeight: 'bold' }}>{pendingProjects.length} Pending</span>
                 </div>
                 <div style={tableContainer}>
                   <table style={tableStyle}>
@@ -323,8 +398,8 @@ const PGMDashboard = ({ username, onLogout }) => {
                         pendingProjects.map(proj => (
                           <tr key={proj.id} style={trStyle}>
                             <td style={tdStyle}>
-                              <span style={{fontWeight:700, color:'#1B3A6B'}}>{proj.name}</span><br/>
-                              <small style={{color:'#666'}}>Program: {proj.program_name}</small>
+                              <span style={{ fontWeight: 700, color: '#1B3A6B' }}>{proj.name}</span><br />
+                              <small style={{ color: '#666' }}>Program: {proj.program_name}</small>
                             </td>
                             <td style={tdStyle}>{proj.created_by_name || proj.pm_name}</td>
                             <td style={tdStyle}>{proj.start_date} to {proj.end_date}</td>
@@ -336,18 +411,60 @@ const PGMDashboard = ({ username, onLogout }) => {
                           </tr>
                         ))
                       ) : (
-                        <tr><td colSpan="4" style={{...tdStyle, textAlign:'center'}}>No pending approvals found.</td></tr>
+                        <tr><td colSpan="4" style={{ ...tdStyle, textAlign: 'center' }}>No pending approvals found.</td></tr>
                       )}
                     </tbody>
                   </table>
                 </div>
               </div>
 
+              {/* 1b. ADDITIONAL SPRINT APPROVALS - NEW FLOW */}
+              {pendingSprints.length > 0 && (
+                <div style={{ marginBottom: '35px' }}>
+                  <div style={{ ...alertHeader, background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)' }}>
+                    <h3 style={{ ...sectionTitle, color: '#fff' }}> Action Required: Additional Sprint Approvals</h3>
+                    <span style={{ fontWeight: 'bold', color: '#fff' }}>{pendingSprints.length} Pending Sprint(s)</span>
+                  </div>
+                  <div style={{ ...tableContainer, border: '1px solid #fef3c7' }}>
+                    <table style={tableStyle}>
+                      <thead style={{ ...theadStyle, background: '#fef3c7' }}>
+                        <tr>
+                          <th style={{ ...thStyle, color: '#92400e' }}>SPRINT DETAILS</th>
+                          <th style={{ ...thStyle, color: '#92400e' }}>PROJECT INFO</th>
+                          <th style={{ ...thStyle, color: '#92400e' }}>TIMELINE</th>
+                          <th style={{ ...thStyle, color: '#92400e' }}>ACTION</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingSprints.map(s => (
+                          <tr key={s.sprint_id} style={trStyle}>
+                            <td style={tdStyle}>
+                              <span style={{ fontWeight: 700, color: '#b45309' }}>{s.sprint_name}</span><br />
+                              <small style={{ color: '#666' }}>Requested by: PM (<b>{s.pm_username}</b>)</small>
+                            </td>
+                            <td style={tdStyle}>
+                              <span style={{ fontWeight: 700, color: '#1E293B' }}>{s.project_name}</span><br />
+                              <small style={{ color: '#64748B' }}>Program: {s.program_name}</small>
+                            </td>
+                            <td style={tdStyle}>{s.start_date} to {s.end_date}</td>
+                            <td style={tdStyle}>
+                              <button onClick={() => { setSelectedSprintReview(s); setShowSprintReviewModal(true); }} style={{ ...reviewBtn, backgroundColor: '#ea580c' }}>
+                                Review Sprint
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* 2. ACTIVE PROGRAMS LIST */}
               <div style={{ marginBottom: '35px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                    <h3 style={sectionTitle}>All Programs Overview</h3>
-                    <button onClick={() => setShowModal(true)} style={primBtn}>+ Create New Program</button>
+                  <h3 style={sectionTitle}>All Programs Overview</h3>
+                  <button onClick={() => setShowModal(true)} style={primBtn}>+ Create New Program</button>
                 </div>
                 <div style={tableContainer}>
                   <table style={tableStyle}>
@@ -376,7 +493,7 @@ const PGMDashboard = ({ username, onLogout }) => {
                                 </select>
                                 <button onClick={() => handleAssignPM(pgm.id)} style={assignBtn}>Update</button>
                               </div>
-                            ) : <span style={{fontSize:'11px', fontStyle:'italic'}}>Waiting Approval</span>}
+                            ) : <span style={{ fontSize: '11px', fontStyle: 'italic' }}>Waiting Approval</span>}
                           </td>
                         </tr>
                       ))}
@@ -389,303 +506,529 @@ const PGMDashboard = ({ username, onLogout }) => {
         ) : (
           /* WORKING PROGRAMS TAB */
           <div style={{ padding: '25px' }}>
-             <h3 style={{...sectionTitle, marginBottom: '20px', fontSize: '18px' }}>🚀 Programs Currently in Execution</h3>
-             <div style={tableContainer}>
-                <table style={tableStyle}>
-                  <thead style={theadStyle}>
-                    <tr>
-                      <th style={thStyle}>WORKING PROGRAM</th>
-                      <th style={thStyle}>MANAGER</th>
-                      <th style={thStyle}>LATEST STATUS</th>
-                      <th style={thStyle}>ACTIONS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {programs.filter(p => (p.status === 'Approved' || p.status === 'In Progress') && p.project_manager_assigned_name).length > 0 ? (
-                      programs
-                        .filter(p => (p.status === 'Approved' || p.status === 'In Progress') && p.project_manager_assigned_name)
-                        .map(pgm => (
+            <h3 style={{ ...sectionTitle, marginBottom: '20px', fontSize: '18px' }}> Programs Currently in Execution</h3>
+            <div style={tableContainer}>
+              <table style={tableStyle}>
+                <thead style={theadStyle}>
+                  <tr>
+                    <th style={thStyle}>WORKING PROGRAM</th>
+                    <th style={thStyle}>MANAGER</th>
+                    <th style={thStyle}>LATEST STATUS</th>
+                    <th style={thStyle}>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {programs.filter(p => (p.status === 'Approved' || p.status === 'In Progress') && p.project_manager_assigned_name).length > 0 ? (
+                    programs
+                      .filter(p => (p.status === 'Approved' || p.status === 'In Progress') && p.project_manager_assigned_name)
+                      .map(pgm => (
                         <tr key={pgm.id} style={trStyle}>
                           <td style={tdStyle}>
-                            <div style={{fontWeight:'700', color:'#1e293b'}}>{pgm.name}</div>
-                            <div style={{fontSize:'11px', color:'#64748b'}}>{pgm.start_date} to {pgm.end_date}</div>
+                            <div style={{ fontWeight: '700', color: '#1e293b' }}>{pgm.name}</div>
+                            <div style={{ fontSize: '11px', color: '#64748b' }}>{pgm.start_date} to {pgm.end_date}</div>
                           </td>
                           <td style={tdStyle}>
-                             <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
-                               <div style={{ width: '25px', height: '25px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', color: '#fff', fontWeight: 'bold', fontSize: '10px' }}>{pgm.project_manager_assigned_name.charAt(0)}</div>
-                               {pgm.project_manager_assigned_name}
-                             </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ width: '25px', height: '25px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', color: '#fff', fontWeight: 'bold', fontSize: '10px' }}>{pgm.project_manager_assigned_name.charAt(0)}</div>
+                              {pgm.project_manager_assigned_name}
+                            </div>
                           </td>
                           <td style={tdStyle}>
-                             {(() => {
-                               const pct = pgm.completion_percentage || 0;
-                               let label = "IN PROGRESS";
-                               let color = "#1e40af";
-                               let bg = "#dbeafe";
+                            {(() => {
+                              const pct = pgm.completion_percentage || 0;
+                              let label = "IN PROGRESS";
+                              let color = "#1e40af";
+                              let bg = "#dbeafe";
 
-                               if (pct === 0) { label = "NOT STARTED"; color = "#64748b"; bg = "#f1f5f9"; }
-                               else if (pct === 100) { label = "COMPLETED"; color = "#166534"; bg = "#dcfce7"; }
-                               else if (pct > 90) { label = "ALMOST DONE"; color = "#854d0e"; bg = "#fef9c3"; }
-                               else { label = `${pct}% COMPLETE`; }
+                              if (pct === 0) { label = "NOT STARTED"; color = "#64748b"; bg = "#f1f5f9"; }
+                              else if (pct === 100) { label = "COMPLETED"; color = "#166534"; bg = "#dcfce7"; }
+                              else if (pct > 90) { label = "ALMOST DONE"; color = "#854d0e"; bg = "#fef9c3"; }
+                              else { label = `${pct}% COMPLETE`; }
 
-                               return (
-                                 <span style={{ background: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
-                                   {label}
-                                 </span>
-                               );
-                             })()}
+                              return (
+                                <span style={{ background: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
+                                  {label}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td style={tdStyle}>
                             <button
                               onClick={() => handleLiveTrack(pgm.id)}
-                              style={{...primBtn, padding:'8px 15px', fontSize:'12px', display:'flex', alignItems:'center', gap:'5px'}}
+                              style={{ ...primBtn, padding: '8px 15px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' }}
                             >
-                              {loadingStats ? 'Loading...' : 'Live Track 📈'}
+                              {loadingStats ? 'Loading...' : 'Live Track '}
                             </button>
                           </td>
                         </tr>
                       ))
-                    ) : (
-                      <tr><td colSpan="4" style={{...tdStyle, textAlign:'center'}}>No active working programs to track.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-             </div>
+                  ) : (
+                    <tr><td colSpan="4" style={{ ...tdStyle, textAlign: 'center' }}>No active working programs to track.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
 
+
+      {/* RESOURCE PERFORMANCE & ANALYTICS OPERATION VIEW */}
+      {activeTab === 'resource_analytics' && (
+        <div style={{ padding: '25px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div>
+              <h3 style={{ margin: 0, color: '#1B3A6B', fontSize: '20px', fontWeight: '800' }}> Resource Analytics & Performance Operations</h3>
+              <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Real-time oversight of Program Managers, Project Managers, and Team Members.</p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <input
+                type="text"
+                placeholder=" Search resources..."
+                style={{ ...inp, width: '220px', padding: '8px 12px', height: '36px', boxSizing: 'border-box' }}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <select
+                style={{ ...inp, width: '150px', padding: '8px 12px', height: '36px', boxSizing: 'border-box' }}
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+              >
+                <option value="All">All Roles</option>
+                <option value="PGM">Program Managers</option>
+                <option value="PM">Project Managers</option>
+                <option value="TM">Team Members</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '25px' }}>
+            <div style={{ ...summCard, textAlign: 'left', padding: '20px', borderLeft: '5px solid #2563EB', cursor: 'default' }}>
+              <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>Total Team Size</div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: '#1B3A6B' }}>{resources.length}</div>
+              <span style={{ fontSize: '10px', color: '#64748b' }}>Registered workforce</span>
+            </div>
+            <div style={{ ...summCard, textAlign: 'left', padding: '20px', borderLeft: '5px solid #10B981', cursor: 'default' }}>
+              <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>Avg Utilization</div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: '#10B981' }}>
+                {resources.filter(r => r.role === 'TM').length > 0 ? (resources.filter(r => r.role === 'TM').reduce((sum, r) => sum + r.assigned_fte, 0) / resources.filter(r => r.role === 'TM').length * 100).toFixed(1) : 0}%
+              </div>
+              <span style={{ fontSize: '10px', color: '#64748b' }}>Active workload capacity</span>
+            </div>
+            <div style={{ ...summCard, textAlign: 'left', padding: '20px', borderLeft: '5px solid #F59E0B', cursor: 'default' }}>
+              <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>Underutilized staff</div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: '#F59E0B' }}>
+                {resources.filter(r => r.role === 'TM' && r.assigned_fte < 0.5).length}
+              </div>
+              <span style={{ fontSize: '10px', color: '#64748b' }}>FTE allocation under 0.5</span>
+            </div>
+            <div style={{ ...summCard, textAlign: 'left', padding: '20px', borderLeft: '5px solid #EF4444', cursor: 'default' }}>
+              <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>Hire Alerts</div>
+              <div style={{ fontSize: '24px', fontWeight: '800', color: '#EF4444' }}>
+                {resources.filter(r => r.assigned_fte > 1.0).length > 0 ? `${resources.filter(r => r.assigned_fte > 1.0).length} Overloaded` : '0 Gaps'}
+              </div>
+              <span style={{ fontSize: '10px', color: '#64748b' }}>Resources exceeding 1.0 FTE</span>
+            </div>
+          </div>
+
+          {resources.filter(r => r.assigned_fte > 1.0).length > 0 && (
+            <div style={{
+              background: 'linear-gradient(135deg, #fef2f2, #fee2e2)',
+              border: '1px solid #fca5a5',
+              borderLeft: '5px solid #ef4444',
+              padding: '15px 20px',
+              borderRadius: '12px',
+              marginBottom: '25px',
+              boxShadow: '0 4px 6px rgba(239,68,68,0.05)'
+            }}>
+              <h5 style={{ margin: '0 0 8px 0', color: '#991b1b', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                Critical Capacity & Hiring Demand Alerts
+              </h5>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                {resources.filter(r => r.assigned_fte > 1.0).map((r, idx) => (
+                  <div key={idx} style={{ fontSize: '12px', color: '#7f1d1d', fontWeight: '600' }}>
+                    • Overload Alert: <b>{r.username}</b> (FTE <b>{r.assigned_fte}</b>) is currently overloaded! We recommend immediate hiring or reallocation of a new <b>{r.role_display}</b> resource to optimize program health.
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px', marginBottom: '25px' }}>
+            <div style={chartContainer}>
+              <h4 style={chartHeader}> Planned vs Logged FTE Workload</h4>
+              <div style={{ height: 260 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={resources.filter(r => r.role === 'TM')}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="username" tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Legend wrapperStyle={{ fontSize: 11, fontWeight: 'bold' }} />
+                    <Bar dataKey="assigned_fte" name="Planned Assigned FTE" fill="#2563EB" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="calculated_fte" name="Calculated Effort FTE" fill="#10B981" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div style={chartContainer}>
+              <h4 style={chartHeader}> Top Resource Performance Analytics</h4>
+              <div style={{ height: 260 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={resources.slice(0, 5)}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="username" tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Legend wrapperStyle={{ fontSize: 11, fontWeight: 'bold' }} />
+                    <Bar dataKey="performance_score" name="Performance Score" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          <div style={tableContainer}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={theadStyle}>
+                  <th style={thStyle}>Resource Name</th>
+                  <th style={thStyle}>Role</th>
+                  <th style={thStyle}>Assigned FTE</th>
+                  <th style={thStyle}>Calculated FTE</th>
+                  <th style={thStyle}>Task Progress</th>
+                  <th style={thStyle}>Utilization Status</th>
+                  <th style={thStyle}>Performance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resources.filter(r => {
+                  const matchesSearch = r.username.toLowerCase().includes(searchQuery.toLowerCase());
+                  const matchesRole = roleFilter === 'All' || r.role === roleFilter;
+                  return matchesSearch && matchesRole;
+                }).map((r) => {
+                  const isExpanded = expandedResource === r.username;
+                  const completionRate = r.completion_rate;
+
+                  return (
+                    <React.Fragment key={r.username}>
+                      <tr style={{ ...trStyle, cursor: 'pointer', backgroundColor: isExpanded ? '#f8fafc' : 'transparent' }} onClick={() => setExpandedResource(isExpanded ? null : r.username)}>
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>
+                              {r.username.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <span style={{ fontWeight: 'bold', color: '#1E293B', textDecoration: 'underline' }}>{r.username}</span>
+                              <div style={{ fontSize: '10px', color: '#64748B' }}>{r.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={{ fontSize: '11px', background: '#f1f5f9', color: '#475569', padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold' }}>
+                            {r.role_display}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={{ fontWeight: 'bold', color: '#1E40AF' }}>{r.assigned_fte.toFixed(2)} FTE</span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={{ fontWeight: 'bold', color: '#10B981' }}>{r.calculated_fte.toFixed(2)} FTE</span>
+                        </td>
+                        <td style={{ ...tdStyle, width: '150px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ flex: 1, height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{ width: `${completionRate}%`, height: '100%', background: '#8B5CF6' }}></div>
+                            </div>
+                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>{Math.round(completionRate)}%</span>
+                          </div>
+                          <div style={{ fontSize: '9px', color: '#64748b', marginTop: '2px' }}>{r.completed_tasks}/{r.total_tasks} Tasks Completed</div>
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={{
+                            padding: '5px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold',
+                            backgroundColor: r.utilization_status === 'Overutilized' ? '#FEE2E2' : r.utilization_status === 'Optimal' ? '#DCFCE7' : r.utilization_status === 'Underutilized' ? '#FEF3C7' : '#E0F2FE',
+                            color: r.utilization_status === 'Overutilized' ? '#991B1B' : r.utilization_status === 'Optimal' ? '#166534' : r.utilization_status === 'Underutilized' ? '#92400E' : '#0369A1'
+                          }}>
+                            {r.utilization_status.toUpperCase()}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={{ background: '#F5F3FF', color: '#5B21B6', padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold' }}>
+                            {r.performance_score}
+                          </span>
+                        </td>
+                      </tr>
+
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan="7" style={{ padding: '15px 25px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }}>
+                              <div style={{ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                                <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#1B3A6B', fontWeight: 'bold' }}> Active Project Assignments</h5>
+                                {r.active_projects.length > 0 ? (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                    {r.active_projects.map((projName, idx) => (
+                                      <span key={idx} style={{ background: '#EFF6FF', color: '#2563EB', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', border: '1px solid #BFDBFE' }}>
+                                        {projName}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>No active project assignments. Ready for tasking!</span>
+                                )}
+                              </div>
+                              <div style={{ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                                <h5 style={{ margin: '0 0 5px 0', fontSize: '13px', color: '#1B3A6B', fontWeight: 'bold' }}> Bio & Profile Notes</h5>
+                                <p style={{ margin: 0, fontSize: '12px', color: '#475569', lineHeight: 1.4 }}>{r.bio || "No biography provided. Contact staff directly for portfolio or capability details."}</p>
+                                {r.phone && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '8px' }}> Phone: <b>{r.phone}</b></div>}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* NEW MODAL: Real-time Live Tracking Charts */}
       {showTrackerModal && selectedProgramStats && (
         <div style={modalOverlay}>
-           <div style={{...modalBox, width:'900px', maxHeight:'90vh', overflowY:'auto'}}>
-              <div style={{display:'flex', justifyContent:'space-between', borderBottom:'2px solid #f1f5f9', paddingBottom:'15px', marginBottom:'20px'}}>
-                 <div>
-                    <h2 style={{margin:0, color:'#1B3A6B'}}>Live Tracker: {selectedProgramStats.program_name}</h2>
-                    <p style={{margin:0, fontSize:'12px', color:'#64748b'}}>Tracking real-time execution for Manager: <b>{selectedProgramStats.pm_name}</b></p>
-                 </div>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <button 
-                      onClick={handleDownloadReport} 
-                      style={{ ...primBtn, background: '#10b981', border: 'none', padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px' }}
+          <div style={{ ...modalBox, width: '900px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px', marginBottom: '20px' }}>
+              <div>
+                <h2 style={{ margin: 0, color: '#1B3A6B' }}>Live Tracker: {selectedProgramStats.program_name}</h2>
+                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>Tracking real-time execution for Manager: <b>{selectedProgramStats.pm_name}</b></p>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button
+                  onClick={handleDownloadReport}
+                  style={{ ...primBtn, background: '#10b981', border: 'none', padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px' }}
+                >
+                  Download Report
+                </button>
+                <button onClick={() => setShowTrackerModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+              </div>
+            </div>
+
+            {/* Real-time Summary Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '25px' }}>
+              <div style={liveStatCard('#2563EB')}>
+                <div style={liveStatLabel}>OVERALL COMPLETION</div>
+                <div style={liveStatValue}>{selectedProgramStats.overall_progress}%</div>
+              </div>
+              <div style={liveStatCard('#10B981')}>
+                <div style={liveStatLabel}>TOTAL TASKS</div>
+                <div style={liveStatValue}>{selectedProgramStats.total_tasks}</div>
+              </div>
+              <div style={liveStatCard('#f59e0b')}>
+                <div style={liveStatLabel}>COMPLETED</div>
+                <div style={liveStatValue}>{selectedProgramStats.completed_tasks}</div>
+              </div>
+              <div style={liveStatCard('#6366f1')}>
+                <div style={liveStatLabel}>TEAM MEMBERS</div>
+                <div style={liveStatValue}>{selectedProgramStats.team_count}</div>
+              </div>
+            </div>
+
+            {/* Data Visualization Charts */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '20px' }}>
+              <div style={chartContainer}>
+                <h4 style={chartHeader}>Sprint Progress Velocity</h4>
+                <ResponsiveContainer width="100%" height={250}>
+                  <LineChart data={selectedProgramStats.velocity_data}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="completion" stroke="#2563EB" strokeWidth={3} dot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={chartContainer}>
+                <h4 style={chartHeader}>Task Distribution</h4>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie
+                      data={selectedProgramStats.task_distribution}
+                      innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value"
                     >
-                      📥 Download Report
-                    </button>
-                    <button onClick={() => setShowTrackerModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
-                  </div>
+                      <Cell fill="#10B981" /> {/* Done */}
+                      <Cell fill="#f59e0b" /> {/* Doing */}
+                      <Cell fill="#ef4444" /> {/* Todo */}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={legendContainer}>
+                  <span><i style={{ background: '#10B981' }}></i> Done</span>
+                  <span><i style={{ background: '#f59e0b' }}></i> Doing</span>
+                  <span><i style={{ background: '#ef4444' }}></i> Todo</span>
+                </div>
               </div>
+            </div>
+            {/* --- Gran Tracker Section Start --- */}
+            <div style={{ width: '100%', marginTop: '25px', padding: '20px', background: '#fff', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+              <h5 style={{ marginBottom: '15px', fontWeight: 'bold', color: '#1e293b' }}> Program Gran Tracker</h5>
 
-              {/* Real-time Summary Cards */}
-              <div style={{display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'15px', marginBottom:'25px'}}>
-                 <div style={liveStatCard('#2563EB')}>
-                    <div style={liveStatLabel}>OVERALL COMPLETION</div>
-                    <div style={liveStatValue}>{selectedProgramStats.overall_progress}%</div>
-                 </div>
-                 <div style={liveStatCard('#10B981')}>
-                    <div style={liveStatLabel}>TOTAL TASKS</div>
-                    <div style={liveStatValue}>{selectedProgramStats.total_tasks}</div>
-                 </div>
-                 <div style={liveStatCard('#f59e0b')}>
-                    <div style={liveStatLabel}>COMPLETED</div>
-                    <div style={liveStatValue}>{selectedProgramStats.completed_tasks}</div>
-                 </div>
-                 <div style={liveStatCard('#6366f1')}>
-                    <div style={liveStatLabel}>TEAM MEMBERS</div>
-                    <div style={liveStatValue}>{selectedProgramStats.team_count}</div>
-                 </div>
+              {selectedProgramStats?.gantt_data?.length > 0 ? (
+                <div style={{ width: '100%', overflowX: 'auto', background: '#fff' }}>
+                  <Gantt
+                    tasks={selectedProgramStats.gantt_data.map(t => ({
+                      id: String(t.id),
+                      name: t.name || "Task",
+                      start: new Date(t.start || new Date()),
+                      end: new Date(t.end || new Date(new Date().getTime() + 86400000)),
+                      progress: t.progress || 0,
+                      type: 'task',
+                      styles: { progressColor: '#1e293b', progressSelectedColor: '#3b82f6' },
+                    }))}
+                    viewMode={ViewMode.Day}
+                    listCellWidth="150px"
+                    columnWidth={60}
+                  />
+                </div>
+              ) : (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
+                  <p>No timeline data available for this program.</p>
+                </div>
+              )}
+            </div>
+
+            {/* --- Real-time Project Breakdown Section (NEW addition for all dashboards) --- */}
+            <div style={{ marginTop: '25px', padding: '20px', background: '#fff', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
+              <h5 style={{ marginBottom: '15px', fontWeight: 'bold', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                Real-Time Project Execution Status
+                <span className="pulse-dot" style={{ display: 'inline-block', width: '8px', height: '8px', background: '#10b981', borderRadius: '50%' }}></span>
+              </h5>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                      <th style={{ padding: '12px 10px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Project Name</th>
+                      <th style={{ padding: '12px 10px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Current Sprint & Due Date</th>
+                      <th style={{ padding: '12px 10px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Last Task Worked On</th>
+                      <th style={{ padding: '12px 10px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Last Active Developer</th>
+                      <th style={{ padding: '12px 10px', textAlign: 'center', fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Total Effort</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedProgramStats.projects_breakdown && selectedProgramStats.projects_breakdown.length > 0 ? (
+                      selectedProgramStats.projects_breakdown.map((proj, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', transition: '0.2s hover' }} className="activity-card">
+                          {/* Project Name & Status */}
+                          <td style={{ padding: '15px 10px', fontSize: '13px' }}>
+                            <div style={{ fontWeight: 'bold', color: '#1B3A6B' }}>{proj.name}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                              <div style={{ flex: 1, minWidth: '80px', height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ width: `${proj.progress}%`, height: '100%', background: 'linear-gradient(90deg, #3b82f6, #10b981)', borderRadius: '3px' }}></div>
+                              </div>
+                              <span style={{ fontSize: '10px', fontWeight: '800', color: '#475569' }}>{proj.progress}%</span>
+                            </div>
+                          </td>
+                          {/* Sprint Due Date */}
+                          <td style={{ padding: '15px 10px', fontSize: '13px', color: '#334155' }}>
+                            <div style={{ fontWeight: 'bold', color: '#1e293b' }}>{proj.sprint_name}</div>
+                            <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              Due: {proj.sprint_due_date}
+                            </div>
+                          </td>
+                          {/* Last Task Worked On */}
+                          <td style={{ padding: '15px 10px', fontSize: '13px', color: '#475569', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.last_active_task}>
+                            <div style={{ fontWeight: '600' }}>{proj.last_active_task}</div>
+                            <span style={{ display: 'inline-block', marginTop: '4px', fontSize: '9px', background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
+                              Active Task
+                            </span>
+                          </td>
+                          {/* Last Active Team Member */}
+                          <td style={{ padding: '15px 10px', fontSize: '13px' }}>
+                            {proj.last_active_member !== 'None' ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold' }}>
+                                  {proj.last_active_member.substring(0, 2).toUpperCase()}
+                                </div>
+                                <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{proj.last_active_member}</span>
+                              </div>
+                            ) : (
+                              <span style={{ fontStyle: 'italic', color: '#94a3b8' }}>No activity yet</span>
+                            )}
+                          </td>
+                          {/* Total Effort Hours */}
+                          <td style={{ padding: '15px 10px', fontSize: '13px', textAlign: 'center' }}>
+                            <span style={{ background: '#dcfce7', color: '#166534', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', display: 'inline-block' }}>
+                              {proj.total_hours} hrs
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                          No projects currently set up for execution under this program.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
+            </div>
 
-              {/* Data Visualization Charts */}
-              <div style={{display:'grid', gridTemplateColumns:'1.6fr 1fr', gap:'20px'}}>
-                 <div style={chartContainer}>
-                    <h4 style={chartHeader}>Sprint Progress Velocity</h4>
-                    <ResponsiveContainer width="100%" height={250}>
-                       <LineChart data={selectedProgramStats.velocity_data}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="name" tick={{fontSize:10}} />
-                          <YAxis tick={{fontSize:10}} />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="completion" stroke="#2563EB" strokeWidth={3} dot={{r:6}} />
-                       </LineChart>
-                    </ResponsiveContainer>
-                 </div>
-                 <div style={chartContainer}>
-                    <h4 style={chartHeader}>Task Distribution</h4>
-                    <ResponsiveContainer width="100%" height={250}>
-                       <PieChart>
-                          <Pie
-                            data={selectedProgramStats.task_distribution}
-                            innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value"
-                          >
-                             <Cell fill="#10B981" /> {/* Done */}
-                             <Cell fill="#f59e0b" /> {/* Doing */}
-                             <Cell fill="#ef4444" /> {/* Todo */}
-                          </Pie>
-                          <Tooltip />
-                       </PieChart>
-                    </ResponsiveContainer>
-                    <div style={legendContainer}>
-                       <span><i style={{background:'#10B981'}}></i> Done</span>
-                       <span><i style={{background:'#f59e0b'}}></i> Doing</span>
-                       <span><i style={{background:'#ef4444'}}></i> Todo</span>
-                    </div>
-                 </div>
-              </div>
-                {/* --- Gran Tracker Section Start --- */}
-<div style={{ width: '100%', marginTop: '25px', padding: '20px', background: '#fff', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-    <h5 style={{ marginBottom: '15px', fontWeight: 'bold', color: '#1e293b' }}>📊 Program Gran Tracker</h5>
-
-   {selectedProgramStats?.gantt_data?.length > 0 ? (
-    <div style={{ width: '100%', overflowX: 'auto', background: '#fff' }}>
-        <Gantt
-            tasks={selectedProgramStats.gantt_data.map(t => ({
-                id: String(t.id),
-                name: t.name || "Task",
-                start: new Date(t.start || new Date()),
-                end: new Date(t.end || new Date(new Date().getTime() + 86400000)),
-                progress: t.progress || 0,
-                type: 'task',
-                styles: { progressColor: '#1e293b', progressSelectedColor: '#3b82f6' },
-            }))}
-            viewMode={ViewMode.Day}
-            listCellWidth="150px"
-            columnWidth={60}
-        />
-    </div>
-) : (
-        <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
-            <p>No timeline data available for this program.</p>
-        </div>
-    )}
-</div>
-
-              {/* --- Real-time Project Breakdown Section (NEW addition for all dashboards) --- */}
-              <div style={{ marginTop: '25px', padding: '20px', background: '#fff', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
-                  <h5 style={{ marginBottom: '15px', fontWeight: 'bold', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      🚀 Real-Time Project Execution Status
-                      <span className="pulse-dot" style={{ display: 'inline-block', width: '8px', height: '8px', background: '#10b981', borderRadius: '50%' }}></span>
-                  </h5>
-                  
-                  <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                              <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                                  <th style={{ padding: '12px 10px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Project Name</th>
-                                  <th style={{ padding: '12px 10px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Current Sprint & Due Date</th>
-                                  <th style={{ padding: '12px 10px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Last Task Worked On</th>
-                                  <th style={{ padding: '12px 10px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Last Active Developer</th>
-                                  <th style={{ padding: '12px 10px', textAlign: 'center', fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Total Effort</th>
-                              </tr>
-                          </thead>
-                          <tbody>
-                              {selectedProgramStats.projects_breakdown && selectedProgramStats.projects_breakdown.length > 0 ? (
-                                  selectedProgramStats.projects_breakdown.map((proj, idx) => (
-                                      <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', transition: '0.2s hover' }} className="activity-card">
-                                          {/* Project Name & Status */}
-                                          <td style={{ padding: '15px 10px', fontSize: '13px' }}>
-                                              <div style={{ fontWeight: 'bold', color: '#1B3A6B' }}>{proj.name}</div>
-                                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                                                  <div style={{ flex: 1, minWidth: '80px', height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
-                                                      <div style={{ width: `${proj.progress}%`, height: '100%', background: 'linear-gradient(90deg, #3b82f6, #10b981)', borderRadius: '3px' }}></div>
-                                                  </div>
-                                                  <span style={{ fontSize: '10px', fontWeight: '800', color: '#475569' }}>{proj.progress}%</span>
-                                              </div>
-                                          </td>
-                                          {/* Sprint Due Date */}
-                                          <td style={{ padding: '15px 10px', fontSize: '13px', color: '#334155' }}>
-                                              <div style={{ fontWeight: 'bold', color: '#1e293b' }}>{proj.sprint_name}</div>
-                                              <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                  📅 Due: {proj.sprint_due_date}
-                                              </div>
-                                          </td>
-                                          {/* Last Task Worked On */}
-                                          <td style={{ padding: '15px 10px', fontSize: '13px', color: '#475569', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proj.last_active_task}>
-                                              <div style={{ fontWeight: '600' }}>{proj.last_active_task}</div>
-                                              <span style={{ display: 'inline-block', marginTop: '4px', fontSize: '9px', background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
-                                                  Active Task
-                                              </span>
-                                          </td>
-                                          {/* Last Active Team Member */}
-                                          <td style={{ padding: '15px 10px', fontSize: '13px' }}>
-                                              {proj.last_active_member !== 'None' ? (
-                                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                      <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold' }}>
-                                                          {proj.last_active_member.substring(0, 2).toUpperCase()}
-                                                      </div>
-                                                      <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{proj.last_active_member}</span>
-                                                  </div>
-                                              ) : (
-                                                  <span style={{ fontStyle: 'italic', color: '#94a3b8' }}>No activity yet</span>
-                                              )}
-                                          </td>
-                                          {/* Total Effort Hours */}
-                                          <td style={{ padding: '15px 10px', fontSize: '13px', textAlign: 'center' }}>
-                                              <span style={{ background: '#dcfce7', color: '#166534', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', display: 'inline-block' }}>
-                                                  {proj.total_hours} hrs
-                                              </span>
-                                          </td>
-                                      </tr>
-                                  ))
-                              ) : (
-                                  <tr>
-                                      <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
-                                          No projects currently set up for execution under this program.
-                                      </td>
-                                  </tr>
-                              )}
-                          </tbody>
-                      </table>
-                  </div>
-              </div>
-
-              <div style={{marginTop:'25px', padding:'15px', background:'#f8fafc', borderRadius:'10px', border:'1px solid #e2e8f0'}}>
-    <h4 style={{marginTop:0, fontSize:'13px', color:'#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px'}}>
-        Recent Team Activity Log
-    </h4>
-    <div style={{maxHeight:'200px', overflowY:'auto'}}>
-        {selectedProgramStats.recent_logs && selectedProgramStats.recent_logs.length > 0 ? (
-            selectedProgramStats.recent_logs.map((log, i) => (
-                <div key={i} style={{
-                    padding: '10px 0',
-                    borderBottom: '1px solid #f1f5f9',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start'
-                }}>
-                    <div style={{ fontSize: '12px' }}>
+            <div style={{ marginTop: '25px', padding: '15px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+              <h4 style={{ marginTop: 0, fontSize: '13px', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
+                Recent Team Activity Log
+              </h4>
+              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                {selectedProgramStats.recent_logs && selectedProgramStats.recent_logs.length > 0 ? (
+                  selectedProgramStats.recent_logs.map((log, i) => (
+                    <div key={i} style={{
+                      padding: '10px 0',
+                      borderBottom: '1px solid #f1f5f9',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start'
+                    }}>
+                      <div style={{ fontSize: '12px' }}>
                         <strong style={{ color: '#2563EB' }}>{log.user}</strong>
                         <span style={{ color: '#64748b' }}> in </span>
                         <strong style={{ color: '#1e293b' }}>{log.sprint || 'N/A'}</strong>
                         <div style={{ marginTop: '4px', color: '#475569' }}>
-                            <b>Task:</b> {log.task_name || 'Unnamed Task'}
+                          <b>Task:</b> {log.task_name || 'Unnamed Task'}
                         </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#ef4444' }}>
-                           Due: {log.due_date || 'No Date'}
+                          Due: {log.due_date || 'No Date'}
                         </div>
                         <div style={{
-                            fontSize: '10px',
-                            marginTop: '4px',
-                            background: '#dcfce7',
-                            color: '#166534',
-                            padding: '2px 8px',
-                            borderRadius: '10px',
-                            display: 'inline-block'
+                          fontSize: '10px',
+                          marginTop: '4px',
+                          background: '#dcfce7',
+                          color: '#166534',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          display: 'inline-block'
                         }}>
-                            {log.status || 'In Progress'}
+                          {log.status || 'In Progress'}
                         </div>
+                      </div>
                     </div>
-                </div>
-            ))
-        ) : (
-            <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', color: '#94a3b8' }}>
-                No activity logs available for this program.
+                  ))
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', color: '#94a3b8' }}>
+                    No activity logs available for this program.
+                  </div>
+                )}
+              </div>
             </div>
-        )}
-    </div>
-</div>
-           </div>
+          </div>
         </div>
       )}
 
@@ -693,14 +1036,14 @@ const PGMDashboard = ({ username, onLogout }) => {
       {showReviewModal && selectedReview && (
         <div style={modalOverlay}>
           <div style={{ ...modalBox, width: '650px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h2 style={{ color: '#1B3A6B', borderBottom:'2px solid #2563EB', paddingBottom:'10px' }}>Project Plan Review</h2>
+            <h2 style={{ color: '#1B3A6B', borderBottom: '2px solid #2563EB', paddingBottom: '10px' }}>Project Plan Review</h2>
             <div style={reviewGrid}>
               <div><label style={lbl}>Project Name</label><div style={valText}>{selectedReview.project_name || selectedReview.name}</div></div>
               <div><label style={lbl}>Submitted By</label><div style={valText}>{selectedReview.pm_name || selectedReview.created_by_name}</div></div>
             </div>
             <label style={lbl}>Description</label>
             <div style={valText}>{selectedReview.description || 'No description provided'}</div>
-            <h4 style={{marginTop:'20px'}}>👥 Team & Resource Allocation</h4>
+            <h4 style={{ marginTop: '20px' }}> Team & Resource Allocation</h4>
             <div style={miniTableContainer}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
@@ -715,11 +1058,11 @@ const PGMDashboard = ({ username, onLogout }) => {
                         <td style={tdStyle}>{m.username}</td><td style={tdStyle}>{m.role}</td><td style={tdStyle}>{m.fte}</td>
                       </tr>
                     ))
-                  ) : (<tr><td colSpan="3" style={{...tdStyle, textAlign:'center'}}>No members found</td></tr>)}
+                  ) : (<tr><td colSpan="3" style={{ ...tdStyle, textAlign: 'center' }}>No members found</td></tr>)}
                 </tbody>
               </table>
             </div>
-            <h4 style={{ marginTop: '20px' }}>📅 Proposed Sprints</h4>
+            <h4 style={{ marginTop: '20px' }}> Proposed Sprints</h4>
             <div style={miniTableContainer}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
@@ -733,37 +1076,102 @@ const PGMDashboard = ({ username, onLogout }) => {
                       <tr key={i} style={{ borderBottom: '1px solid #edf2f7' }}>
                         <td style={tdStyle}>{s.name}</td><td style={tdStyle}>{s.start_date} to {s.end_date}</td>
                         <td style={tdStyle}>
-                           <span style={{ height: '10px', width: '10px', borderRadius: '50%', backgroundColor: getStatusColor(s.end_date), display: 'inline-block', marginRight:'5px' }}></span>
-                           <span style={{fontSize:'11px', color: getStatusColor(s.end_date)}}>{new Date(s.end_date).setHours(0,0,0,0) < new Date().setHours(0,0,0,0) ? 'Overdue' : 'On Track'}</span>
+                          <span style={{ height: '10px', width: '10px', borderRadius: '50%', backgroundColor: getStatusColor(s.end_date), display: 'inline-block', marginRight: '5px' }}></span>
+                          <span style={{ fontSize: '11px', color: getStatusColor(s.end_date) }}>{new Date(s.end_date).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0) ? 'Overdue' : 'On Track'}</span>
                         </td>
                       </tr>
                     ))
-                  ) : (<tr><td colSpan="3" style={{...tdStyle, textAlign:'center'}}>No sprints found</td></tr>)}
+                  ) : (<tr><td colSpan="3" style={{ ...tdStyle, textAlign: 'center' }}>No sprints found</td></tr>)}
                 </tbody>
               </table>
             </div>
+
+            <h4 style={{ marginTop: '20px' }}>Return Note (Required for Return)</h4>
+            <textarea
+              style={{ ...inp, height: '60px', marginBottom: '0' }}
+              placeholder="Please specify why this project is being returned..."
+              value={returnNote}
+              onChange={(e) => setReturnNote(e.target.value)}
+            ></textarea>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-    <button onClick={() => setShowReviewModal(false)} style={secBtn}>Back</button>
-
-    {/* Approve button: Ye status ko 'Approved' kar dega */}
-    <button
-  onClick={() => handleDecision(selectedReview.id, 'approve')}
-  style={{ ...primBtn, backgroundColor: '#10b981' }}
->
-  Approve
-</button>
-
-{/* Reject button - Line 555 */}
-<button
-  onClick={() => handleDecision(selectedReview.id, 'reject')}
-  style={{ ...primBtn, backgroundColor: '#ef4444' }}
->
-  Reject
-</button>
-</div>
+              <button onClick={() => setShowReviewModal(false)} style={secBtn}>Back</button>
+              <button
+                onClick={() => handleDecision(selectedReview.id, 'approve')}
+                style={{ ...primBtn, backgroundColor: '#10b981' }}
+              >
+                Approve
+              </button>
+              <button
+                onClick={() => handleDecision(selectedReview.id, 'return')}
+                style={{ ...primBtn, backgroundColor: '#f59e0b' }}
+              >
+                Return
+              </button>
+            </div>
           </div>
         </div>
       )}
+
+      {/* --- REVIEW ADDITIONAL SPRINT MODAL --- */}
+      {showSprintReviewModal && (
+        <div style={modalOverlay}>
+          <div style={{ ...modalBox, width: '500px', padding: '0', borderRadius: '16px', overflow: 'hidden', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+            <div style={{ background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)', padding: '20px 30px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>Review Additional Sprint</h3>
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '10px', marginTop: '4px', display: 'inline-block', fontWeight: 'bold' }}>Active Project Request</span>
+              </div>
+              <button onClick={() => setShowSprintReviewModal(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', opacity: 0.8 }}>✕</button>
+            </div>
+            <div style={{ padding: '30px' }}>
+              <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: '12px 15px', borderRadius: '8px', marginBottom: '20px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#b45309' }}>⚡ Project Status: IN PROGRESS</span>
+                <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#92400e', lineHeight: '1.4' }}>This project has already started. This is a request from the Project Manager (<b>{selectedSprintReview?.pm_username}</b>) to add a new sprint to the timeline.</p>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ ...lbl, fontSize: '12px', color: '#78350f' }}>Project Name</label>
+                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>{selectedSprintReview?.project_name}</div>
+                </div>
+                <div>
+                  <label style={{ ...lbl, fontSize: '12px', color: '#78350f' }}>Program Name</label>
+                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>{selectedSprintReview?.program_name}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ ...lbl, fontSize: '12px', color: '#78350f' }}>Requested Sprint</label>
+                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>{selectedSprintReview?.sprint_name}</div>
+                </div>
+                <div>
+                  <label style={{ ...lbl, fontSize: '12px', color: '#78350f' }}>Sprint Timeline</label>
+                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>{selectedSprintReview?.start_date} to {selectedSprintReview?.end_date}</div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ ...lbl, fontSize: '12px', color: '#78350f' }}>Feedback Notes (Required only for Return)</label>
+                <textarea
+                  style={{ ...inp, padding: '10px', fontSize: '13px', borderRadius: '8px', border: '1px solid #e2e8f0', height: '80px', resize: 'vertical' }}
+                  placeholder="Enter return notes or feedback..."
+                  value={sprintReturnNote}
+                  onChange={(e) => setSprintReturnNote(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button onClick={() => setShowSprintReviewModal(false)} style={{ background: '#f1f5f9', color: '#475569', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => handleReviewSprintSubmit('Returned')} style={{ background: '#ea580c', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Return to PM</button>
+                <button onClick={() => handleReviewSprintSubmit('Approved')} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Approve Sprint</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* MODAL: New Program Creation (Original Code - Preserved) */}
       {showModal && (
@@ -772,15 +1180,15 @@ const PGMDashboard = ({ username, onLogout }) => {
             <h3 style={{ color: '#1B3A6B' }}>Initiate New Program</h3>
             <form onSubmit={handleCreateProgram}>
               <label style={lbl}>Title</label>
-              <input style={inp} required onChange={(e) => setFormData({...formData, name: e.target.value})} />
-              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}>
-                <div><label style={lbl}>Start Date</label><input style={inp} type="date" required onChange={(e) => setFormData({...formData, start_date: e.target.value})} /></div>
-                <div><label style={lbl}>End Date</label><input style={inp} type="date" required onChange={(e) => setFormData({...formData, end_date: e.target.value})} /></div>
+              <input style={inp} required onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div><label style={lbl}>Start Date</label><input style={inp} type="date" required onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} /></div>
+                <div><label style={lbl}>End Date</label><input style={inp} type="date" required onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} /></div>
               </div>
               <label style={lbl}>Description</label>
-              <textarea style={{...inp, height:'80px'}} placeholder="Program details..." onChange={(e) => setFormData({...formData, description: e.target.value})}></textarea>
+              <textarea style={{ ...inp, height: '80px' }} placeholder="Program details..." onChange={(e) => setFormData({ ...formData, description: e.target.value })}></textarea>
               <label style={lbl}>Reference Document</label>
-              <input type="file" style={inp} onChange={(e) => setFormData({...formData, document: e.target.files[0]})}/>
+              <input type="file" style={inp} onChange={(e) => setFormData({ ...formData, document: e.target.files[0] })} />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button type="button" onClick={() => setShowModal(false)} style={secBtn}>Cancel</button>
                 <button type="submit" style={primBtn}>Create Program</button>
@@ -811,7 +1219,7 @@ const headerStyle = { height: '65px', background: '#fff', borderBottom: '1px sol
 const cardGrid = { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', padding: '25px' };
 const summCard = { background: '#fff', padding: '20px', borderRadius: '10px', border: '1px solid #e2e8f0' };
 const sectionTitle = { margin: 0, color: '#1B3A6B', fontSize: '14px', fontWeight: '800' };
-const alertHeader = { display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fffbeb', padding:'12px 20px', borderRadius:'8px 8px 0 0', border:'1px solid #fef3c7' };
+const alertHeader = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fffbeb', padding: '12px 20px', borderRadius: '8px 8px 0 0', border: '1px solid #fef3c7' };
 const tableContainer = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: '0 0 8px 8px', overflow: 'hidden' };
 const tableStyle = { width: '100%', borderCollapse: 'collapse' };
 const theadStyle = { background: '#f8fafc', borderBottom: '1px solid #e2e8f0' };
@@ -820,30 +1228,30 @@ const tdStyle = { padding: '15px', borderBottom: '1px solid #f1f5f9', fontSize: 
 const trStyle = { transition: '0.2s hover' };
 const primBtn = { background: '#2563EB', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' };
 const reviewBtn = { background: '#1B3A6B', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' };
-const secBtn = { background: '#f1f5f9', color:'#475569', border: '1px solid #e2e8f0', padding: '8px 18px', borderRadius: '6px', cursor: 'pointer' };
+const secBtn = { background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '8px 18px', borderRadius: '6px', cursor: 'pointer' };
 const assignBtn = { background: '#10B981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' };
-const miniSelect = { padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize:'12px' };
-const modalOverlay = { position: 'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(15, 23, 42, 0.7)', display:'flex', justifyContent:'center', alignItems:'center', zIndex: 1000 };
+const miniSelect = { padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '12px' };
+const modalOverlay = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 };
 const modalBox = { background: '#fff', padding: '35px', borderRadius: '15px', width: '500px' };
-const lbl = { display: 'block', fontSize: '11px', fontWeight: '800', marginBottom: '6px', color:'#64748B' };
+const lbl = { display: 'block', fontSize: '11px', fontWeight: '800', marginBottom: '6px', color: '#64748B' };
 const inp = { width: '100%', padding: '12px', marginBottom: '18px', border: '1px solid #e2e8f0', borderRadius: '6px' };
-const valText = { background:'#f8fafc', padding:'10px', borderRadius:'6px', border:'1px solid #eff6ff', marginBottom:'15px', fontSize:'14px' };
-const reviewGrid = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' };
-const miniTableContainer = { border:'1px solid #e2e8f0', borderRadius:'8px', overflow:'hidden', marginTop:'10px' };
-const miniTh = { padding:'10px', textAlign:'left', fontSize:'10px', color:'#64748B' };
+const valText = { background: '#f8fafc', padding: '10px', borderRadius: '6px', border: '1px solid #eff6ff', marginBottom: '15px', fontSize: '14px' };
+const reviewGrid = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' };
+const miniTableContainer = { border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', marginTop: '10px' };
+const miniTh = { padding: '10px', textAlign: 'left', fontSize: '10px', color: '#64748B' };
 const logoutBtnStyle = { padding: '5px 10px', fontSize: '11px', cursor: 'pointer', background: '#EF4444', color: '#fff', border: 'none', borderRadius: '4px' };
 
 const SummaryCard = ({ num, label, isAmber }) => (
-    <div style={summCard}>
-      <div style={{ fontSize: '24px', fontWeight: '800', color: isAmber ? '#d97706' : '#1B3A6B' }}>{num}</div>
-      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '800', textTransform: 'uppercase' }}>{label}</div>
-    </div>
+  <div style={summCard}>
+    <div style={{ fontSize: '24px', fontWeight: '800', color: isAmber ? '#d97706' : '#1B3A6B' }}>{num}</div>
+    <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '800', textTransform: 'uppercase' }}>{label}</div>
+  </div>
 );
 
 const statusBadge = (s) => ({
-    fontSize: '10px', padding: '4px 12px', borderRadius: '20px', fontWeight: '800',
-    background: s === 'Approved' ? '#dcfce7' : s === 'Rejected' ? '#fee2e2' : '#fef3c7',
-    color: s === 'Approved' ? '#166534' : s === 'Rejected' ? '#991b1b' : '#92400e',
+  fontSize: '10px', padding: '4px 12px', borderRadius: '20px', fontWeight: '800',
+  background: s === 'Approved' ? '#dcfce7' : s === 'Rejected' ? '#fee2e2' : '#fef3c7',
+  color: s === 'Approved' ? '#166534' : s === 'Rejected' ? '#991b1b' : '#92400e',
 });
 
 export default PGMDashboard;

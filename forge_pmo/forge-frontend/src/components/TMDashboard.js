@@ -16,9 +16,12 @@ const TMDashboard = ({ user, onLogout }) => {
     fte_score: 0,
     assigned_fte: 0,
     total_programs: 0,
-    daily_limit: 9
+    daily_limit: 9,
+    latest_update_note: ''
   });
   const [toastMessage, setToastMessage] = useState(null);
+  const [activeView, setActiveView] = useState('dashboard');
+
 
   // Focus Mode State - Pro Version
   const [isFocusMode, setIsFocusMode] = useState(false);
@@ -41,6 +44,14 @@ const TMDashboard = ({ user, onLogout }) => {
   });
 
   const [newProjectCount, setNewProjectCount] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/get-notifications/?username=${user}`);
+      if (res.ok) setNotifications(await res.json());
+    } catch (err) { console.error("Notif fetch error:", err); }
+  }, [user]);
 
   const showToast = (msg, type = 'success') => {
     setToastMessage({ msg, type });
@@ -112,14 +123,18 @@ const TMDashboard = ({ user, onLogout }) => {
     if (user) {
         fetchTasks();
         fetchDashboardStats();
+            fetchNotifications();
         fetchUserProfile();
+        fetchNotifications();
         const interval = setInterval(() => { 
             fetchTasks();
             fetchDashboardStats();
+            fetchNotifications();
         }, 5000);
         const handleFocus = () => {
             fetchTasks();
             fetchDashboardStats();
+            fetchNotifications();
             fetchUserProfile();
         };
         window.addEventListener('focus', handleFocus);
@@ -128,7 +143,7 @@ const TMDashboard = ({ user, onLogout }) => {
             window.removeEventListener('focus', handleFocus);
         };
     }
-  }, [user, fetchTasks, fetchDashboardStats, fetchUserProfile]);
+  }, [user, fetchTasks, fetchDashboardStats, fetchNotifications, fetchUserProfile]);
 
   useEffect(() => {
     if (user && selectedProjectId) {
@@ -165,8 +180,18 @@ const TMDashboard = ({ user, onLogout }) => {
     return () => clearInterval(timerRef.current);
   }, [isTimerRunning, timerLeft, focusPhase]);
 
-  const clearNotifications = () => {
-      setNewProjectCount(0);
+  const clearNotifications = async () => {
+      try {
+        await fetch('http://127.0.0.1:8000/api/mark-notifications-read/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: user })
+        });
+        setNotifications([]);
+        setNewProjectCount(0);
+      } catch (err) {
+        console.error("Error clearing notifications:", err);
+      }
   };
 
   const toggleTimer = () => setIsTimerRunning(!isTimerRunning);
@@ -238,17 +263,17 @@ const TMDashboard = ({ user, onLogout }) => {
       const results = await Promise.all(updates);
       const allOk = results.every(res => res.ok);
       if (allOk) {
-          showToast('✅ Daily Effort Saved Successfully!', 'success');
+          showToast(' Daily Effort Saved Successfully!', 'success');
           setDailyInput({});
           setFocusHistory({});
           await fetchTasks();
           await fetchDashboardStats();
       } else {
           const errorData = await results[0].json();
-          showToast(`❌ Error: ${errorData.message || 'Failed to save effort'}`, 'error');
+          showToast(` Error: ${errorData.message || 'Failed to save effort'}`, 'error');
       }
     } catch (err) {
-        showToast('❌ Server connection failed.', 'error');
+        showToast(' Server connection failed.', 'error');
     } finally {
         setLoading(false);
     }
@@ -265,7 +290,7 @@ const TMDashboard = ({ user, onLogout }) => {
       if (response.ok) {
         await fetchTasks();
         await fetchDashboardStats();
-        showToast(`✅ Sprint is now ${newStatus}`, 'success');
+        showToast(` Sprint is now ${newStatus}`, 'success');
       }
     } catch (err) { console.error(err); }
   };
@@ -385,7 +410,7 @@ const TMDashboard = ({ user, onLogout }) => {
                         <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px', lineHeight: '1.5' }}>{profileData.bio}</div>
                     </div>
                     <div style={{ marginTop: '10px', padding: '12px', background: '#FEF3C7', color: '#92400E', borderRadius: '8px', fontSize: '12px', border: '1px solid #FDE68A', textAlign: 'center' }}>
-                        ℹ️ Profile details are managed by HR/Admin and cannot be edited.
+                         Profile details are managed by HR/Admin and cannot be edited.
                     </div>
                 </div>
             </div>
@@ -410,13 +435,13 @@ const TMDashboard = ({ user, onLogout }) => {
             <div style={focusCardPro}>
                {focusPhase === 'setup' && (
                    <>
-                       <h2 style={{margin: '0 0 10px 0', color: '#1B3A6B'}}>🎯 Focus Session</h2>
+                       <h2 style={{margin: '0 0 10px 0', color: '#1B3A6B'}}> Focus Session</h2>
                        <p style={{fontSize: '14px', color: '#64748b', marginBottom: '25px'}}>Select your focus duration for:<br/><b>{focusTask.task_title}</b></p>
                        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px'}}>
-                           <button onClick={() => startSession(15)} style={btnDuration}>⚡ Quick Fix <br/> <span style={{fontSize: '12px', fontWeight: 'normal'}}>15 min</span></button>
-                           <button onClick={() => startSession(25)} style={{...btnDuration, background: '#EFF6FF', borderColor: '#3B82F6'}}>🧠 Deep Work <br/> <span style={{fontSize: '12px', fontWeight: 'normal'}}>25 min</span></button>
-                           <button onClick={() => startSession(45)} style={btnDuration}>🔥 Hyper Focus <br/> <span style={{fontSize: '12px', fontWeight: 'normal'}}>45 min</span></button>
-                           <button onClick={() => startSession(60)} style={btnDuration}>🌊 Flow State <br/> <span style={{fontSize: '12px', fontWeight: 'normal'}}>60 min</span></button>
+                           <button onClick={() => startSession(15)} style={btnDuration}> Quick Fix <br/> <span style={{fontSize: '12px', fontWeight: 'normal'}}>15 min</span></button>
+                           <button onClick={() => startSession(25)} style={{...btnDuration, background: '#EFF6FF', borderColor: '#3B82F6'}}> Deep Work <br/> <span style={{fontSize: '12px', fontWeight: 'normal'}}>25 min</span></button>
+                           <button onClick={() => startSession(45)} style={btnDuration}> Hyper Focus <br/> <span style={{fontSize: '12px', fontWeight: 'normal'}}>45 min</span></button>
+                           <button onClick={() => startSession(60)} style={btnDuration}> Flow State <br/> <span style={{fontSize: '12px', fontWeight: 'normal'}}>60 min</span></button>
                        </div>
                        <button onClick={() => setIsFocusMode(false)} style={btnFocusCancelSetup}>Cancel</button>
                    </>
@@ -426,7 +451,7 @@ const TMDashboard = ({ user, onLogout }) => {
                    <>
                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
                            <span style={{background: focusPhase === 'break' ? '#ECFDF5' : '#EFF6FF', color: focusPhase === 'break' ? '#10B981' : '#3B82F6', padding: '5px 12px', borderRadius: '15px', fontSize: '12px', fontWeight: 'bold'}}>
-                               {focusPhase === 'break' ? '☕ Break Time' : '🧠 Focusing'}
+                               {focusPhase === 'break' ? ' Break Time' : ' Focusing'}
                            </span>
                            {focusPhase === 'active' && <span style={{fontSize: '12px', color: '#64748B'}}>Priority: <b>{focusTask.priority}</b></span>}
                        </div>
@@ -453,7 +478,7 @@ const TMDashboard = ({ user, onLogout }) => {
 
                        <div style={{display: 'flex', gap: '15px', marginTop: '30px'}}>
                           <button onClick={toggleTimer} style={btnFocusPrimary}>
-                             {isTimerRunning ? '⏸ Pause' : '▶ Resume'}
+                             {isTimerRunning ? ' Pause' : ' Resume'}
                           </button>
                           {focusPhase === 'active' && (
                               <button onClick={logPartialTimeAndClose} style={btnFocusSecondary}>Stop & Log Time</button>
@@ -467,12 +492,12 @@ const TMDashboard = ({ user, onLogout }) => {
 
                {focusPhase === 'completed' && (
                    <div style={{textAlign: 'center'}}>
-                       <div style={{fontSize: '60px', margin: '0 0 10px 0'}}>🎉</div>
+                       <div style={{fontSize: '60px', margin: '0 0 10px 0'}}></div>
                        <h2 style={{color: '#10B981', margin: '0 0 10px 0'}}>Session Complete!</h2>
                        <p style={{color: '#64748B', fontSize: '14px', marginBottom: '30px'}}>Great job! You stayed focused for {Math.round(totalTime/60)} minutes.</p>
                        <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
-                           <button onClick={logPartialTimeAndClose} style={{...btnFocusPrimary, width: '100%'}}>💾 Log Time & Close</button>
-                           <button onClick={() => { logPartialTimeAndClose(); startBreak(); setIsFocusMode(true); }} style={{...btnFocusSecondary, width: '100%', background: '#ECFDF5', color: '#10B981', border: '1px solid #A7F3D0'}}>☕ Take a 5 min Break</button>
+                           <button onClick={logPartialTimeAndClose} style={{...btnFocusPrimary, width: '100%'}}> Log Time & Close</button>
+                           <button onClick={() => { logPartialTimeAndClose(); startBreak(); setIsFocusMode(true); }} style={{...btnFocusSecondary, width: '100%', background: '#ECFDF5', color: '#10B981', border: '1px solid #A7F3D0'}}> Take a 5 min Break</button>
                        </div>
                    </div>
                )}
@@ -487,13 +512,13 @@ const TMDashboard = ({ user, onLogout }) => {
         <div style={sidebarScrollArea}>
             <div style={navGroup}>
                 <p style={navLabel}>NAVIGATION</p>
-                <div style={navItemActive}>⚡ My Dashboard</div>
+                <div onClick={() => setActiveView('dashboard')} style={activeView === 'dashboard' ? navItemActive : navItem}> My Dashboard</div>
             </div>
             <div style={navGroup}>
                 <p style={navLabel}>MY PROJECTS</p>
                 {projects.map(proj => (
-                    <div key={proj.name} onClick={() => setSelectedProjectId(proj.name)} style={selectedProjectId === proj.name ? projectItemActive : projectItem}>
-                        <span style={{marginRight: '8px', color: selectedProjectId === proj.name ? '#60A5FA' : '#cbd5e1'}}>●</span> 
+                    <div key={proj.name} onClick={() => { setSelectedProjectId(proj.name); setActiveView('project'); }} style={activeView === 'project' && selectedProjectId === proj.name ? projectItemActive : projectItem}>
+                        <span style={{marginRight: '8px', color: activeView === 'project' && selectedProjectId === proj.name ? '#60A5FA' : '#cbd5e1'}}>•</span> 
                         {proj.name}
                     </div>
                 ))}
@@ -506,7 +531,7 @@ const TMDashboard = ({ user, onLogout }) => {
         {/* HEADER */}
         <div style={topHeaderStyle}>
             <div>
-               <h2 style={topTitleStyle}>Hello, {user} 👋</h2>
+               <h2 style={topTitleStyle}>Hello, {user} </h2>
                <p style={{margin: 0, fontSize: '13px', color: '#64748B'}}>Here is your personalized workspace.</p>
             </div>
             <div style={{...userAvatarStyle, cursor: 'pointer'}} onClick={() => setShowProfileModal(true)} title="View Profile">
@@ -514,64 +539,125 @@ const TMDashboard = ({ user, onLogout }) => {
             </div>
         </div>
 
-        {/* --- HEADER SUMMARY CARDS --- */}
-        <div style={{ display: 'flex', gap: '20px', padding: '0 25px', marginTop: '20px' }}>
-            <div style={{ ...headerCard, borderLeft: '5px solid #1B3A6B' }}>
-                <h6 style={headerCardTitle}>Active Projects</h6>
-                <h3 style={{ margin: 0, fontWeight: 'bold', color: '#1B3A6B', fontSize: '24px' }}>{projects.length}</h3>
-                <span style={{ fontSize: '10px', color: '#64748B', display: 'block', marginTop: '4px' }}>Currently assigned</span>
+                {/* --- HEADER SUMMARY CARDS REMOVED --- */}
+        {activeView === 'dashboard' ? (
+            <div style={{ padding: '25px' }}>
+               <h3 style={sectionTitlePremium}> My Projects Quick Progress</h3>
+               <div style={{ background: '#fff', borderRadius: '15px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                       <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                           <tr>
+                               <th style={{ padding: '15px', textAlign: 'left', color: '#64748B', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase' }}>Project Name</th>
+                               <th style={{ padding: '15px', textAlign: 'left', color: '#64748B', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase' }}>Project Manager</th>
+                               <th style={{ padding: '15px', textAlign: 'left', color: '#64748B', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase' }}>My Tasks Completed</th>
+                               <th style={{ padding: '15px', textAlign: 'left', color: '#64748B', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase' }}>Progress</th>
+                           </tr>
+                       </thead>
+                       <tbody>
+                           {projects.length > 0 ? projects.map((proj, idx) => {
+                               const projTasks = tasks.filter(t => t.project_name === proj.name);
+                               const total = projTasks.length;
+                               const done = projTasks.filter(t => t.status === 'Done').length;
+                               const progress = total === 0 ? 0 : Math.round((done / total) * 100);
+                               return (
+                                   <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', transition: '0.2s' }} onClick={() => { setSelectedProjectId(proj.name); setActiveView('project'); }} className="activity-card">
+                                       <td style={{ padding: '15px', fontWeight: 'bold', color: '#1B3A6B' }}>{proj.name}</td>
+                                       <td style={{ padding: '15px', color: '#475569', fontSize: '13px' }}>{proj.pm || 'Unassigned'}</td>
+                                       <td style={{ padding: '15px', color: '#475569', fontSize: '13px' }}>{done} / {total} Tasks</td>
+                                       <td style={{ padding: '15px' }}>
+                                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                               <div style={{ flex: 1, height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                                                   <div style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(90deg, #3b82f6, #10b981)' }}></div>
+                                               </div>
+                                               <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#1B3A6B' }}>{progress}%</span>
+                                           </div>
+                                       </td>
+                                   </tr>
+                               );
+                           }) : (
+                               <tr><td colSpan="4" style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>No active projects found.</td></tr>
+                           )}
+                       </tbody>
+                   </table>
+               </div>
             </div>
-
-            <div style={{ ...headerCard, borderLeft: '5px solid #10B981' }}>
-                <h6 style={headerCardTitle}>Assigned FTE</h6>
-                <h3 style={{ margin: 0, fontWeight: 'bold', color: '#10B981', fontSize: '24px' }}>
-                    {stats.assigned_fte || '0.0'}
-                </h3>
-                <span style={{ fontSize: '10px', color: '#64748B', display: 'block', marginTop: '4px' }}>Sum of workload allocations</span>
-            </div>
-
-            <div style={{ ...headerCard, borderLeft: '5px solid #F59E0B' }}>
-                <h6 style={headerCardTitle}>Calculated FTE</h6>
-                <h3 style={{ margin: 0, fontWeight: 'bold', color: '#F59E0B', fontSize: '24px' }}>
-                    {stats.fte_score || '0.0'}
-                </h3>
-                <span style={{ fontSize: '10px', color: '#64748B', display: 'block', marginTop: '4px' }}>Monthly hours logged / 160</span>
-            </div>
-            
-            <div style={{ ...headerCard, cursor: newProjectCount > 0 ? 'pointer' : 'default', borderLeft: newProjectCount > 0 ? '5px solid #EF4444' : '5px solid #6366F1' }} onClick={newProjectCount > 0 ? clearNotifications : null}>
-                <h6 style={headerCardTitle}>New Assignments</h6>
-                <h3 style={{ margin: 0, fontWeight: 'bold', color: newProjectCount > 0 ? '#EF4444' : '#6366F1', fontSize: '24px' }}>
-                    {newProjectCount > 0 ? `+${newProjectCount} New!` : '0'}
-                </h3>
-                <span style={{ fontSize: '10px', color: '#64748B', display: 'block', marginTop: '4px' }}>Inbox notifications</span>
-            </div>
-        </div>
-
+        ) : (
+            <>
+              {stats.latest_update_note && (
+                  <div style={{ margin: '25px 25px 0 25px', padding: '15px 20px', borderRadius: '12px', background: 'linear-gradient(135deg, #1B3A6B 0%, #1e40af 100%)', boxShadow: '0 4px 12px rgba(27,58,107,0.15)', display: 'flex', alignItems: 'center', gap: '15px', color: '#fff' }}>
+                      <div style={{ fontSize: '24px' }}>📢</div>
+                      <div>
+                          <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.8 }}>Latest Announcement from PM</div>
+                          <p style={{ margin: '5px 0 0 0', fontSize: '14px', fontWeight: '500', lineHeight: '1.5' }}>"{stats.latest_update_note}"</p>
+                      </div>
+                  </div>
+              )}
         <div style={{display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '25px', padding: '25px'}}>
            {/* SMART AGENDA */}
            <div style={premiumCard}>
-              <h3 style={sectionTitlePremium}>🌟 Smart Agenda</h3>
-              {urgentTask ? (
-                  <div style={urgentTaskBox}>
-                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
-                         <div>
-                            <span style={priorityTagHi}>High Priority</span>
-                            <h4 style={{margin: '10px 0 5px 0', fontSize: '16px', color: '#0F172A'}}>{urgentTask.task_title}</h4>
-                            <p style={{margin: 0, fontSize: '12px', color: '#64748B'}}>Due: <b>{urgentTask.due_date}</b> • {urgentTask.project_name}</p>
-                         </div>
-                         <button onClick={() => startFocusForTask(urgentTask)} style={btnFocusStart}>
-                            🎯 Start Focus Mode
-                         </button>
-                      </div>
+              <h3 style={sectionTitlePremium}> Smart Agenda</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: newProjectCount > 0 || notifications.length > 0 ? '1.2fr 1fr' : '1fr', gap: '15px' }}>
+                  {/* Column 1: Daily Focus & PM Alerts */}
+                  <div>
+                      {/* Red Alerts for PM added/updated tasks */}
+                      {notifications.filter(n => n.message.includes('PM_ADD') || n.message.includes('added by the Project Manager')).map(n => (
+                          <div key={n.id} style={{ background: '#fef2f2', padding: '12px 15px', borderRadius: '10px', border: '1px solid #fca5a5', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div>
+                                  <span style={{ fontSize: '9px', fontWeight: 'bold', color: '#b91c1c', background: '#fee2e2', padding: '2px 8px', borderRadius: '12px', border: '1px solid #f87171', textTransform: 'uppercase' }}>PM Update Required</span>
+                                  <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#991b1b', fontWeight: 'bold' }}>{n.message.replace('PM_ADD: ', '')}</p>
+                              </div>
+                              <button onClick={clearNotifications} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', marginLeft: '10px' }}>Acknowledge</button>
+                          </div>
+                      ))}
+
+                      {urgentTask ? (
+                          <div style={urgentTaskBox}>
+                              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                                 <div>
+                                    <span style={priorityTagHi}>High Priority</span>
+                                    <h4 style={{margin: '10px 0 5px 0', fontSize: '16px', color: '#0F172A'}}>{urgentTask.task_title}</h4>
+                                    <p style={{margin: 0, fontSize: '12px', color: '#64748B'}}>Due: <b>{urgentTask.due_date}</b> • {urgentTask.project_name}</p>
+                                 </div>
+                                 <button onClick={() => startFocusForTask(urgentTask)} style={btnFocusStart}>
+                                     Start Focus Mode
+                                 </button>
+                              </div>
+                          </div>
+                      ) : (
+                          <div style={emptyStateBox}> No urgent tasks! You are all caught up.</div>
+                      )}
                   </div>
-              ) : (
-                  <div style={emptyStateBox}>🎉 No urgent tasks! You are all caught up.</div>
-              )}
+
+                  {/* Column 2: New Project / Task Assignments Panel (smart agenda side) */}
+                  {(newProjectCount > 0 || notifications.length > 0) && (
+                      <div style={{ background: '#eff6ff', padding: '15px', borderRadius: '10px', border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto' }}>
+                          <h4 style={{ margin: 0, fontSize: '11px', color: '#1e3a8a', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Inbox Assignments</h4>
+                          
+                          {newProjectCount > 0 && (
+                              <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #dbeafe' }}>
+                                  <div style={{ fontSize: '9px', fontWeight: '800', color: '#2563eb', textTransform: 'uppercase' }}>Project Assignment</div>
+                                  <h5 style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#1e293b' }}>{newProjectCount} new project(s) assigned to you.</h5>
+                              </div>
+                          )}
+
+                          {notifications.filter(n => !n.message.includes('PM_ADD') && !n.message.includes('added by the Project Manager')).map(n => (
+                              <div key={n.id} style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #dbeafe' }}>
+                                  <div style={{ fontSize: '9px', fontWeight: '800', color: '#3b82f6', textTransform: 'uppercase' }}>Update</div>
+                                  <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#475569', lineHeight: '1.4' }}>{n.message}</p>
+                              </div>
+                          ))}
+
+                          <button onClick={clearNotifications} style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', marginTop: 'auto', alignSelf: 'flex-start' }}>
+                              Clear All
+                          </button>
+                      </div>
+                  )}
+              </div>
            </div>
 
            {/* WELLNESS GAUGE */}
            <div style={premiumCard}>
-              <h3 style={sectionTitlePremium}>🔋 Wellness & Capacity</h3>
+              <h3 style={sectionTitlePremium}> Wellness & Capacity</h3>
               <div style={{display: 'flex', alignItems: 'center', gap: '20px', marginTop: '15px'}}>
                  <div style={{width: '100px', height: '100px', borderRadius: '50%', background: `conic-gradient(${wellnessColor} ${utilization * 100}%, #f1f5f9 0)`, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
                     <div style={{width: '75px', height: '75px', background: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column'}}>
@@ -582,6 +668,18 @@ const TMDashboard = ({ user, onLogout }) => {
                     <h4 style={{margin: '0 0 5px 0', color: wellnessColor, fontSize: '18px'}}>{wellnessStatus}</h4>
                     <p style={{margin: 0, fontSize: '13px', color: '#64748B'}}>{wellnessMsg}</p>
                     <p style={{margin: '5px 0 0 0', fontSize: '12px', color: '#94A3B8'}}>Daily Limit: {stats.daily_limit}h</p>
+                    
+                    {/* Embedded Assigned and Calculated FTE inside Wellness Gauges */}
+                    <div style={{ display: 'flex', gap: '15px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                        <div>
+                           <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase' }}>Assigned FTE</div>
+                           <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#10B981' }}>{stats.assigned_fte || '0.0'}</div>
+                        </div>
+                        <div>
+                           <div style={{ fontSize: '9px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase' }}>Calculated FTE</div>
+                           <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#F59E0B' }}>{stats.fte_score || '0.0'}</div>
+                        </div>
+                     </div>
                  </div>
               </div>
            </div>
@@ -589,7 +687,7 @@ const TMDashboard = ({ user, onLogout }) => {
 
         {/* ANALYTICS & TIMELINES */}
         <div style={{ padding: '0 25px 25px 25px' }}>
-            <h3 style={sectionTitlePremium}>📊 Analytics & Execution Timelines</h3>
+            <h3 style={sectionTitlePremium}> Analytics & Execution Timelines</h3>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px', marginBottom: '25px' }}>
                 <div style={premiumCard}>
@@ -650,7 +748,7 @@ const TMDashboard = ({ user, onLogout }) => {
         {/* INTERACTIVE KANBAN */}
         <div style={{ padding: '0 25px 25px 25px' }}>
           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
-             <h3 style={sectionTitlePremium}>🚀 Sprint Execution</h3>
+             <h3 style={sectionTitlePremium}> Sprint Execution</h3>
           </div>
 
           {Object.keys(tasksBySprint).sort().map(sprintName => {
@@ -723,7 +821,7 @@ const TMDashboard = ({ user, onLogout }) => {
                             )}
                             {task.status === 'In Progress' && (
                                 <>
-                                  <button onClick={() => startFocusForTask(task)} style={btnFocusSmall}>🎯 Focus</button>
+                                  <button onClick={() => startFocusForTask(task)} style={btnFocusSmall}> Focus</button>
                                   <button onClick={() => updateStatus(task.id, 'Done')} style={finishBtn}>Mark Done</button>
                                 </>
                             )}
@@ -751,7 +849,7 @@ const TMDashboard = ({ user, onLogout }) => {
                      <p style={{margin: 0, fontSize: '13px', color: '#64748b'}}>Log your hours against active tasks for today.</p>
                   </div>
                   <button onClick={saveDailyLog} style={btnSaveLog} disabled={loading}>
-                      {loading ? 'Saving...' : '💾 Save Effort'}
+                      {loading ? 'Saving...' : ' Save Effort'}
                   </button>
                </div>
                
@@ -768,7 +866,7 @@ const TMDashboard = ({ user, onLogout }) => {
                               <span style={badgeStatusOutline(task.status)}>{task.status}</span>
                               {taskHistory.length > 0 && (
                                   <div style={{marginTop: '10px', fontSize: '12px', color: isDanger ? '#ef4444' : '#10B981', fontWeight: '600', padding: '8px', background: isDanger ? '#fef2f2' : '#ecfdf5', borderRadius: '6px', border: `1px solid ${isDanger ? '#fecaca' : '#a7f3d0'}`, display: 'inline-block'}}>
-                                      ⚡ Focused today: {taskHistory.map(h => `${h.mins}m (${h.type})`).join(' + ')} = {totalFocusMins}m total
+                                       Focused today: {taskHistory.map(h => `${h.mins}m (${h.type})`).join(' + ')} = {totalFocusMins}m total
                                   </div>
                               )}
                            </div>
@@ -795,6 +893,8 @@ const TMDashboard = ({ user, onLogout }) => {
             </div>
         </div>
 
+            </>
+        )}
       </div>
     </div>
   );
@@ -809,6 +909,7 @@ const logoText = { fontSize: '16px', fontWeight: '700', letterSpacing: '0.5px' }
 const sidebarScrollArea = { flex: 1, overflowY: 'auto' };
 const navGroup = { marginBottom: '35px' };
 const navLabel = { fontSize: '11px', color: '#64748B', marginBottom: '15px', fontWeight: '800', letterSpacing: '1px' };
+const navItem = { padding: '12px 18px', margin: '0 15px 5px 15px', borderRadius: '10px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', color: '#94a3b8' };
 const navItemActive = { padding: '12px 15px', borderRadius: '8px', fontSize: '14px', backgroundColor: 'rgba(59,130,246,0.1)', borderLeft: '4px solid #3B82F6', color: '#60A5FA', fontWeight: '600' };
 const projectItem = { padding: '10px 15px', cursor: 'pointer', borderRadius: '8px', marginBottom: '5px', color: '#94A3B8', fontSize: '14px', transition: 'all 0.2s' };
 const projectItemActive = { ...projectItem, backgroundColor: 'rgba(255,255,255,0.05)', color: '#fff', fontWeight: '600' };

@@ -18,10 +18,10 @@ const Login = ({ onLogin }) => {
       if (data.success) {
         onLogin(data.username, data.role);
       } else {
-        setErrorMsg('❌ Invalid Username or Password! Please check your credentials.');
+        setErrorMsg(' Invalid Username or Password! Please check your credentials.');
       }
     } catch (err) {
-      setErrorMsg('❌ Cannot connect to server. Please ensure the Django server is running.');
+      setErrorMsg(' Cannot connect to server. Please ensure the Django server is running.');
     }
   };
 

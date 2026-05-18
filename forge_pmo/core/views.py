@@ -166,7 +166,8 @@ def my_assigned_programs(request):
             'status_label': status_label,
             'start_date': p.start_date,
             'end_date': p.end_date,
-            'project_id': proj_id
+            'project_id': proj_id,
+            'return_note': project.return_note if project else None
         })
 
     return Response(data)
@@ -178,7 +179,7 @@ def get_active_projects(request):
         return Response([], status=200)
     try:
         # pyrefly: ignore [missing-attribute]
-        projects = Project.objects.filter(created_by__username=username).select_related('program')
+        projects = Project.objects.filter(created_by__username=username).select_related('program').order_by('-id')
         serializer = ProjectSerializer(projects, many=True)
         return Response(serializer.data, status=200)
     except Exception as e:
@@ -189,7 +190,7 @@ def get_active_projects(request):
 @api_view(['GET'])
 def get_project_managers(request):
     try:
-        users = User.objects.filter(profile__role='PM').select_related('profile')
+        users = User.objects.filter(profile__role='PM', username__in=['khwahish_pm', 'shailja_pgm', 'pranav_spoc', 'yash_tm', 'priya_tm']).select_related('profile')
         data = [{"id": user.id, "username": user.username} for user in users]
         return Response(data, status=200)
     except Exception as e:
@@ -199,7 +200,7 @@ def get_project_managers(request):
 @api_view(['GET'])
 def get_team_members(request):
     try:
-        users = User.objects.filter(profile__role='TM').select_related('profile')
+        users = User.objects.filter(profile__role='TM', username__in=['khwahish_pm', 'shailja_pgm', 'pranav_spoc', 'yash_tm', 'priya_tm']).select_related('profile')
         data = [{"id": user.id, "username": user.username} for user in users]
         return Response(data, status=200)
     except Exception as e:
@@ -301,7 +302,8 @@ def get_pending_projects(request):
 @api_view(['POST'])
 def approve_project_plan(request):
     project_id = request.data.get('project_id')
-    decision = request.data.get('decision')  # 'approve' or 'reject'
+    decision = request.data.get('decision')  # 'approve', 'reject', or 'return'
+    return_note = request.data.get('return_note', '')
 
     try:
         # pyrefly: ignore [missing-attribute]
@@ -310,6 +312,9 @@ def approve_project_plan(request):
         # Syncing with PM Dashboard labels
         if decision == 'approve':
             project.status = 'Approved'
+        elif decision == 'return':
+            project.status = 'Returned'
+            project.return_note = return_note
         else:
             project.status = 'Rejected'
 
@@ -318,6 +323,26 @@ def approve_project_plan(request):
     # pyrefly: ignore [missing-attribute]
     except Project.DoesNotExist:
         return Response({"error": "Project not found"}, status=404)
+
+
+@api_view(['POST'])
+def start_project_execution(request):
+    project_id = request.data.get('project_id')
+    try:
+        project = Project.objects.get(id=project_id)
+        project.status = 'In Progress'
+        project.save()
+        
+        program = project.program
+        if program and program.status != 'In Progress':
+            program.status = 'In Progress'
+            program.save()
+            
+        return Response({"success": True, "message": "Project execution started"})
+    except Project.DoesNotExist:
+        return Response({"error": "Project not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 
 # --- TM PROJECTS FIX ---
 @api_view(['GET'])
@@ -371,6 +396,17 @@ def create_task(request):
             due_date=data.get('due_date'),
             status='To Do'
         )
+        # Create PM addition alert notification
+
+        Notification.objects.create(
+
+            user=assignee,
+
+            message=f"PM_ADD: Task '{task.title}' was added by the Project Manager for project '{project.name}'."
+
+        )
+
+
         return Response({"success": True, "task_id": task.id}, status=201)
     except Exception as e:
         logger.error(f"CREATE TASK ERROR: {str(e)}")
@@ -610,6 +646,12 @@ def get_dashboard_stats(request):
 
             if project_name:
                 effort_query = effort_query.filter(task__project__name=project_name)
+                try:
+                    project_obj = Project.objects.get(name=project_name)
+                    stats_data["latest_update_note"] = project_obj.latest_update_note or ""
+                except Project.DoesNotExist:
+                    stats_data["latest_update_note"] = ""
+
 
             # Today's hours
             hours_today = effort_query.filter(log_date=today).aggregate(Sum('hours_added'))['hours_added__sum'] or 0
@@ -1145,8 +1187,8 @@ def get_all_resources(request):
         from django.db.models import Sum
         import datetime
         
-        # Get all profiles
-        profiles = Profile.objects.select_related('user').all()
+        # Get all profiles filtered by allowed users
+        profiles = Profile.objects.select_related('user').filter(user__username__in=['khwahish_pm', 'shailja_pgm', 'pranav_spoc', 'yash_tm', 'priya_tm'])
         
         resources_list = []
         today = datetime.date.today()
@@ -1229,5 +1271,136 @@ def get_all_resources(request):
             })
             
         return Response(resources_list)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+# --- NEW ONGOING PROJECT FLOW APIS ---
+
+@api_view(['POST'])
+def post_project_update_note(request):
+    project_id = request.data.get('project_id')
+    note = request.data.get('note')
+    try:
+        project = Project.objects.get(id=project_id)
+        project.latest_update_note = note
+        project.save()
+        
+        # Notify all assigned team members
+        team_members = TeamMember.objects.filter(project=project)
+        for tm in team_members:
+            Notification.objects.create(
+                user=tm.user,
+                message=f"PM_ADD: [Announcement] Project Manager updated: \"{note}\""
+            )
+            
+        return Response({"success": True})
+    except Project.DoesNotExist:
+        return Response({"error": "Project not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(['POST'])
+def request_additional_sprint(request):
+    from datetime import datetime
+    project_id = request.data.get('project_id')
+    name = request.data.get('name')
+    start_date = request.data.get('start_date')
+    end_date = request.data.get('end_date')
+    try:
+        project = Project.objects.get(id=project_id)
+        
+        # Date Validation
+        s_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        e_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+        if s_date < project.start_date or e_date > project.end_date:
+            return Response({"error": f"Sprint timeline must be within project timeline ({project.start_date} to {project.end_date})"}, status=400)
+            
+        sprint = Sprint.objects.create(
+            project=project,
+            name=name,
+            start_date=start_date,
+            end_date=end_date,
+            status='Pending Approval'
+        )
+        
+        # Notify Program Manager (PGM)
+        pgm_user = project.program.created_by
+        if pgm_user:
+            Notification.objects.create(
+                user=pgm_user,
+                message=f"NEW_SPRINT: Additional sprint '{name}' requested for active project '{project.name}' by PM."
+            )
+            
+        return Response({"success": True, "message": "Sprint request submitted for PGM approval"})
+    except Project.DoesNotExist:
+        return Response({"error": "Project not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(['GET'])
+def get_pending_additional_sprints(request):
+    try:
+        sprints = Sprint.objects.filter(status='Pending Approval').select_related('project', 'project__program', 'project__created_by')
+        sprint_list = []
+        for s in sprints:
+            sprint_list.append({
+                "sprint_id": s.id,
+                "sprint_name": s.name,
+                "start_date": s.start_date.strftime('%Y-%m-%d') if s.start_date else "",
+                "end_date": s.end_date.strftime('%Y-%m-%d') if s.end_date else "",
+                "project_id": s.project.id,
+                "project_name": s.project.name,
+                "project_status": s.project.status,
+                "program_name": s.project.program.name if s.project.program else "No Program",
+                "pm_username": s.project.created_by.username if s.project.created_by else "PM"
+            })
+        return Response(sprint_list)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(['POST'])
+def review_additional_sprint(request):
+    sprint_id = request.data.get('sprint_id')
+    decision = request.data.get('decision') # 'Approved' or 'Returned'
+    return_note = request.data.get('return_note', '')
+    try:
+        sprint = Sprint.objects.get(id=sprint_id)
+        if decision == 'Approved':
+            sprint.status = 'Approved'
+            sprint.save()
+            
+            # Notify PM
+            pm_user = sprint.project.created_by
+            if pm_user:
+                Notification.objects.create(
+                    user=pm_user,
+                    message=f"SPRINT_APPROVED: Additional sprint '{sprint.name}' for project '{sprint.project.name}' was approved by PGM."
+                )
+                
+            # Notify Team Members
+            team_members = TeamMember.objects.filter(project=sprint.project)
+            for tm in team_members:
+                Notification.objects.create(
+                    user=tm.user,
+                    message=f"SPRINT_ADDED: New sprint '{sprint.name}' has been added to project '{sprint.project.name}'."
+                )
+        else:
+            sprint.status = 'Returned'
+            sprint.save()
+            
+            # Notify PM
+            pm_user = sprint.project.created_by
+            if pm_user:
+                Notification.objects.create(
+                    user=pm_user,
+                    message=f"SPRINT_RETURNED: Additional sprint '{sprint.name}' for project '{sprint.project.name}' was returned. Note: {return_note}"
+                )
+                
+        return Response({"success": True})
+    except Sprint.DoesNotExist:
+        return Response({"error": "Sprint not found"}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
