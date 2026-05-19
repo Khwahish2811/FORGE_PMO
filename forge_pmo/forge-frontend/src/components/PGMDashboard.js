@@ -468,6 +468,19 @@ const PGMDashboard = ({ username, onLogout }) => {
               <SummaryCard num={pendingProjects.length} label="Pending Approvals" isAmber={pendingProjects.length > 0} />
               <SummaryCard num={programs.filter(p => p.status === 'Approved').length} label="Active Programs" />
               <SummaryCard num="94%" label="Resource Health" />
+              {(() => {
+                const myRes = resources.find(r => r.username === username);
+                const myFteVal = myRes ? myRes.assigned_fte : 0;
+                const myStatus = myRes ? myRes.workload_status : 'Free';
+                const myColor = myRes ? myRes.workload_color : 'Green';
+                return (
+                  <SummaryCard 
+                    num={`${myFteVal.toFixed(2)} FTE`} 
+                    label={`Your FTE Load (${myStatus})`} 
+                    isAmber={myColor === 'Red' || myColor === 'Yellow'} 
+                  />
+                );
+              })()}
             </div>
 
             <div style={{ padding: '0 25px 25px' }}>
@@ -728,6 +741,52 @@ const PGMDashboard = ({ username, onLogout }) => {
             </div>
           </div>
 
+          {/* SMART WORKLOAD BALANCING & CAPACITY SUGGESTIONS */}
+          <div style={{
+            background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
+            border: '1px solid #cbd5e1',
+            borderLeft: '5px solid #3b82f6',
+            padding: '15px 20px',
+            borderRadius: '12px',
+            marginBottom: '25px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.02)'
+          }}>
+            <h5 style={{ margin: '0 0 10px 0', color: '#1e293b', fontWeight: '800', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+               Smart Suggestions & Workforce Balance
+            </h5>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {resources.filter(r => r.assigned_fte > 1.0).map((r, idx) => {
+                if (r.role === 'PM') {
+                  const idlePM = resources.find(oth => oth.role === 'PM' && oth.assigned_fte < 0.8 && oth.username !== r.username);
+                  return (
+                    <div key={`sugg-${idx}`} style={{ fontSize: '12px', color: '#991b1b', background: '#fee2e2', padding: '8px 12px', borderRadius: '8px', border: '1px solid #fca5a5', fontWeight: '600' }}>
+                      ⚠️ <b>Smart Suggestion:</b> Project Manager <b>{r.username}</b> is overloaded (FTE: <b>{r.assigned_fte.toFixed(2)}</b>). We recommend assigning new tasks or project coordination duties to another Project Manager with available bandwidth{idlePM ? <span> (e.g. <b>{idlePM.username}</b> who is currently underutilized at FTE {idlePM.assigned_fte.toFixed(2)})</span> : ''}.
+                    </div>
+                  );
+                } else if (r.role === 'PGM') {
+                  return (
+                    <div key={`sugg-${idx}`} style={{ fontSize: '12px', color: '#991b1b', background: '#fee2e2', padding: '8px 12px', borderRadius: '8px', border: '1px solid #fca5a5', fontWeight: '600' }}>
+                      ⚠️ <b>Smart Suggestion:</b> Program Manager <b>{r.username}</b> is overloaded (FTE: <b>{r.assigned_fte.toFixed(2)}</b>). Consider reallocating some of their programs to balance PGM workloads.
+                    </div>
+                  );
+                } else {
+                  const underUtilizedDev = resources.find(oth => oth.role === 'TM' && oth.assigned_fte < 0.5 && oth.username !== r.username);
+                  return (
+                    <div key={`sugg-${idx}`} style={{ fontSize: '12px', color: '#991b1b', background: '#fee2e2', padding: '8px 12px', borderRadius: '8px', border: '1px solid #fca5a5', fontWeight: '600' }}>
+                      ⚠️ <b>Smart Suggestion:</b> Team Member <b>{r.username}</b> is overloaded (FTE: <b>{r.assigned_fte.toFixed(2)}</b>). Consider shifting some active tasks to available team member <b>{underUtilizedDev ? underUtilizedDev.username : 'another developer'}</b> (FTE: <b>{underUtilizedDev ? underUtilizedDev.assigned_fte.toFixed(2) : '0.00'}</b>).
+                    </div>
+                  );
+                }
+              })}
+              {resources.filter(r => r.assigned_fte > 1.0).length === 0 && (
+                <div style={{ fontSize: '12px', color: '#166534', background: '#dcfce7', padding: '8px 12px', borderRadius: '8px', border: '1px solid #bbf7d0', fontWeight: '600' }}>
+                  🎉 <b>All Good:</b> Workforce capacity is perfectly balanced. All Program Managers, Project Managers, and Team Members have stable workloads.
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* RETAIN HIRE ALERTS LOGIC COMPATIBILITY */}
           {resources.filter(r => r.assigned_fte > 1.0).length > 0 && (
             <div style={{
               background: 'linear-gradient(135deg, #fef2f2, #fee2e2)',
@@ -831,24 +890,33 @@ const PGMDashboard = ({ username, onLogout }) => {
                           <span style={{ fontWeight: 'bold', color: '#1E40AF' }}>{r.assigned_fte.toFixed(2)} FTE</span>
                         </td>
                         <td style={tdStyle}>
-                          <span style={{ fontWeight: 'bold', color: '#10B981' }}>{r.calculated_fte.toFixed(2)} FTE</span>
+                          <span style={{ fontWeight: 'bold', color: (r.role === 'PGM' || r.role === 'PM') ? '#94A3B8' : '#10B981' }}>
+                            {(r.role === 'PGM' || r.role === 'PM') ? '—' : `${r.calculated_fte.toFixed(2)} FTE`}
+                          </span>
                         </td>
                         <td style={{ ...tdStyle, width: '150px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ flex: 1, height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                              <div style={{ width: `${completionRate}%`, height: '100%', background: '#8B5CF6' }}></div>
-                            </div>
-                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>{Math.round(completionRate)}%</span>
-                          </div>
-                          <div style={{ fontSize: '9px', color: '#64748b', marginTop: '2px' }}>{r.completed_tasks}/{r.total_tasks} Tasks Completed</div>
+                          {(r.role === 'PGM' || r.role === 'PM') ? (
+                            <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', fontWeight: 'bold' }}>N/A (Manager)</span>
+                          ) : (
+                            <>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ flex: 1, height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                                  <div style={{ width: `${completionRate}%`, height: '100%', background: '#8B5CF6' }}></div>
+                                </div>
+                                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569' }}>{Math.round(completionRate)}%</span>
+                              </div>
+                              <div style={{ fontSize: '9px', color: '#64748b', marginTop: '2px' }}>{r.completed_tasks}/{r.total_tasks} Tasks Completed</div>
+                            </>
+                          )}
                         </td>
                         <td style={tdStyle}>
                           <span style={{
                             padding: '5px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold',
-                            backgroundColor: r.utilization_status === 'Overutilized' ? '#FEE2E2' : r.utilization_status === 'Optimal' ? '#DCFCE7' : r.utilization_status === 'Underutilized' ? '#FEF3C7' : '#E0F2FE',
-                            color: r.utilization_status === 'Overutilized' ? '#991B1B' : r.utilization_status === 'Optimal' ? '#166534' : r.utilization_status === 'Underutilized' ? '#92400E' : '#0369A1'
+                            backgroundColor: r.workload_color === 'Red' ? '#FEE2E2' : r.workload_color === 'Yellow' ? '#FEF3C7' : '#DCFCE7',
+                            color: r.workload_color === 'Red' ? '#991B1B' : r.workload_color === 'Yellow' ? '#92400E' : '#166534',
+                            border: `1px solid ${r.workload_color === 'Red' ? '#fca5a5' : r.workload_color === 'Yellow' ? '#fde68a' : '#bbf7d0'}`
                           }}>
-                            {r.utilization_status.toUpperCase()}
+                            {(r.workload_status || r.utilization_status).toUpperCase()}
                           </span>
                         </td>
                         <td style={tdStyle}>
@@ -875,11 +943,58 @@ const PGMDashboard = ({ username, onLogout }) => {
                                 ) : (
                                   <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>No active project assignments. Ready for tasking!</span>
                                 )}
+
+                                {/* Real-time dynamic breakdown for managers */}
+                                {r.extra_metrics && Object.keys(r.extra_metrics).length > 0 && (
+                                  <div style={{ marginTop: '15px', background: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                                    <h6 style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#1E293B', fontWeight: '800', textTransform: 'uppercase' }}>📊 Real-Time FTE Capacity Factors</h6>
+                                    <div style={{ fontSize: '12px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                      {r.role === 'PGM' ? (
+                                        <>
+                                          <div>• <b>Projects Handled:</b> {r.extra_metrics.projects_handled} (× 0.25 FTE = {(r.extra_metrics.projects_handled * 0.25).toFixed(2)})</div>
+                                          <div>• <b>Employees Managed:</b> {r.extra_metrics.employees_managed} (× 0.05 FTE = {(r.extra_metrics.employees_managed * 0.05).toFixed(2)})</div>
+                                          <div>• <b>Meetings & Approvals:</b> {r.extra_metrics.meetings_and_approvals} (× 0.03 FTE = {(r.extra_metrics.meetings_and_approvals * 0.03).toFixed(2)})</div>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <div>• <b>Active Tasks:</b> {r.extra_metrics.active_tasks} (× 0.05 FTE = {(r.extra_metrics.active_tasks * 0.05).toFixed(2)})</div>
+                                          <div>• <b>Team Coordination:</b> {r.extra_metrics.team_coordination} (× 0.08 FTE = {(r.extra_metrics.team_coordination * 0.08).toFixed(2)})</div>
+                                          <div>• <b>Reporting & Deadline Management:</b> {r.extra_metrics.reporting_deadline_management} (× 0.10 FTE = {(r.extra_metrics.reporting_deadline_management * 0.10).toFixed(2)})</div>
+                                        </>
+                                      )}
+                                      <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '6px', marginTop: '4px', fontWeight: 'bold', color: '#1B3A6B' }}>
+                                        Calculated Capacity Load: {r.assigned_fte.toFixed(2)} FTE
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                               <div style={{ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                                <h5 style={{ margin: '0 0 5px 0', fontSize: '13px', color: '#1B3A6B', fontWeight: 'bold' }}> Bio & Profile Notes</h5>
-                                <p style={{ margin: 0, fontSize: '12px', color: '#475569', lineHeight: 1.4 }}>{r.bio || "No biography provided. Contact staff directly for portfolio or capability details."}</p>
-                                {r.phone && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '8px' }}> Phone: <b>{r.phone}</b></div>}
+                                <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#1B3A6B', fontWeight: 'bold' }}>💡 Live Guide & Action Steps</h5>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '11px', lineHeight: '1.4', color: '#475569' }}>
+                                  <div style={{ background: '#F0FDF4', borderLeft: '3px solid #10B981', padding: '8px 10px', borderRadius: '6px' }}>
+                                    <b style={{ color: '#166534' }}>🟢 How to make them "Free"?</b>
+                                    {r.role === 'PGM' ? (
+                                      <div style={{ marginTop: '2px' }}>Move Programs to Completed, delegate to other managers, or approve pending project plans to reduce projects handled.</div>
+                                    ) : r.role === 'PM' ? (
+                                      <div style={{ marginTop: '2px' }}>Move active tasks to 'Done' on your Kanban board, complete sprints, or resolve overdue tasks to free up PM bandwidth.</div>
+                                    ) : (
+                                      <div style={{ marginTop: '2px' }}>A Project Manager can edit their assignment on the 'Project Execution' page to reduce their active project FTE allocation.</div>
+                                    )}
+                                  </div>
+                                  <div style={{ background: '#F8FAFC', borderLeft: '3px solid #64748B', padding: '8px 10px', borderRadius: '6px' }}>
+                                    <b>⚙️ Why is Calculated FTE {r.calculated_fte.toFixed(2)}?</b>
+                                    <div style={{ marginTop: '2px' }}>Calculated FTE represents physical hours logged by this user this month. Once developers log daily hours on tasks, this rises. Since managers oversee teams rather than logging direct task effort, their calculated FTE remains at 0.00.</div>
+                                  </div>
+                                  <div style={{ background: '#EEF2FF', borderLeft: '3px solid #4F46E5', padding: '8px 10px', borderRadius: '6px' }}>
+                                    <b>📈 Why is Task Progress {Math.round(completionRate)}%?</b>
+                                    <div style={{ marginTop: '2px' }}>Progress reflects tasks marked as <b>'Done'</b>. Currently, all tasks are in 'To Do' or 'In Progress'. Move a task to 'Done' on the Kanban dashboard, and this progress rate will automatically rise!</div>
+                                  </div>
+                                  <div style={{ background: '#F5F3FF', borderLeft: '3px solid #8B5CF6', padding: '8px 10px', borderRadius: '6px' }}>
+                                    <b style={{ color: '#5B21B6' }}>🏆 Performance Score Calculation</b>
+                                    <div style={{ marginTop: '2px' }}>Weighted calculation: <b>70% weight</b> on Task Completion Rate + <b>30% weight</b> on active FTE Load (capped at 2.0). Formula: <code style={{ background: '#EDE9FE', padding: '2px 4px', borderRadius: '4px' }}>(Completion Rate × 0.7) + (FTE Load × 15)</code>.</div>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </td>

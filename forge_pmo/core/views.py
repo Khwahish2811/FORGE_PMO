@@ -153,14 +153,24 @@ def my_assigned_programs(request):
     for p in programs:
         # 2. Check if a project exists for this program
         # pyrefly: ignore [missing-attribute]
-        project = Project.objects.filter(program_id=p.id).first()
+        projects_query = Project.objects.filter(program_id=p.id).order_by('-id')
+        project = projects_query.first()
+        project_count = projects_query.count()
 
         status_label = project.status if project else "Build Plan"
+        if status_label == 'Pending':
+            if project_count > 1:
+                status_label = "Updated Plan Sent"
+            else:
+                status_label = "Waiting"
+
         proj_id = project.id if project else None
 
         data.append({
             'id': p.id,
             'name': p.name,
+            'description': p.description,
+            'document': request.build_absolute_uri(p.document.url) if p.document else None,
             'manager_name': p.manager_name,
             'status': p.status,
             'status_label': status_label,
@@ -180,7 +190,16 @@ def get_active_projects(request):
     try:
         # pyrefly: ignore [missing-attribute]
         projects = Project.objects.filter(created_by__username=username).select_related('program').order_by('-id')
-        serializer = ProjectSerializer(projects, many=True)
+        
+        # Keep only the latest project per program
+        seen_programs = set()
+        latest_projects = []
+        for proj in projects:
+            if proj.program_id not in seen_programs:
+                latest_projects.append(proj)
+                seen_programs.add(proj.program_id)
+                
+        serializer = ProjectSerializer(latest_projects, many=True)
         return Response(serializer.data, status=200)
     except Exception as e:
         logger.error(f"ACTIVE PROJECT ERROR: {str(e)}")
@@ -642,26 +661,33 @@ def get_dashboard_stats(request):
 
             # --- HOURS LOGIC (DailyEffortLog table) ---
             # pyrefly: ignore [missing-attribute]
-            effort_query = DailyEffortLog.objects.filter(user__username=username)
+            base_effort_query = DailyEffortLog.objects.filter(user__username=username)
+            effort_query = base_effort_query
 
 
             if project_name:
                 effort_query = effort_query.filter(task__project__name=project_name)
                 try:
-                    project_obj = Project.objects.get(name=project_name)
-                    stats_data["latest_update_note"] = project_obj.latest_update_note or ""
-                    
-                    # Calculate Project Total FTE and User's Project FTE
-                    project_team = TeamMember.objects.filter(project=project_obj)
-                    stats_data["project_total_fte"] = round(float(project_team.aggregate(Sum('fte_score'))['fte_score__sum'] or 0.0), 2)
-                    
-                    user_tm = project_team.filter(user__username=username).first()
-                    stats_data["user_project_fte"] = round(float(user_tm.fte_score if user_tm else 0.0), 2)
+                    project_obj = Project.objects.filter(name=project_name).order_by('-id').first()
+                    if project_obj:
+                        stats_data["latest_update_note"] = project_obj.latest_update_note or ""
+                        
+                        # Calculate Project Total FTE and User's Project FTE
+                        project_team = TeamMember.objects.filter(project=project_obj)
+                        stats_data["project_total_fte"] = round(float(project_team.aggregate(Sum('fte_score'))['fte_score__sum'] or 0.0), 2)
+                        
+                        user_tm = project_team.filter(user__username=username).first()
+                        stats_data["user_project_fte"] = round(float(user_tm.fte_score if user_tm else 0.0), 2)
+                    else:
+                        stats_data["latest_update_note"] = ""
+                        stats_data["project_total_fte"] = 0.0
+                        stats_data["user_project_fte"] = 0.0
 
-                except Project.DoesNotExist:
+                except Exception as e:
                     stats_data["latest_update_note"] = ""
                     stats_data["project_total_fte"] = 0.0
                     stats_data["user_project_fte"] = 0.0
+                    logger.error(f"Error fetching project specific stats: {e}")
 
 
             # Today's hours
@@ -669,8 +695,8 @@ def get_dashboard_stats(request):
             # pyrefly: ignore [bad-typed-dict-key]
             stats_data["hours_today"] = round(float(hours_today), 1)
 
-            # Monthly hours for FTE (160 standard base)
-            total_month_hours = effort_query.filter(
+            # Monthly hours for FTE (160 standard base) - ALWAYS USE UNFILTERED BASE QUERY!
+            total_month_hours = base_effort_query.filter(
                 log_date__month=today.month,
                 log_date__year=today.year
             ).aggregate(Sum('hours_added'))['hours_added__sum'] or 0
@@ -1199,7 +1225,7 @@ def get_all_resources(request):
         import datetime
         
         # Get all profiles filtered by allowed users
-        profiles = Profile.objects.select_related('user').filter(user__username__in=['khwahish_pm', 'shailja_pgm', 'pranav_spoc', 'yash_tm', 'priya_tm'])
+        profiles = Profile.objects.select_related('user').filter(user__username__in=['khwahish_pm', 'shailja_pgm', 'yash_tm', 'priya_tm'])
         
         resources_list = []
         today = datetime.date.today()
@@ -1225,11 +1251,49 @@ def get_all_resources(request):
                 active_projects = [tm.project.name for tm in tms]
             
             # 2. Total Assigned FTE
-            # pyrefly: ignore [missing-attribute]
-            assigned_fte = TeamMember.objects.filter(
-                user=u,
-                project__status__in=['Approved', 'Active', 'In Progress']
-            ).aggregate(total=Sum('fte_score'))['total'] or 0.0
+            extra_metrics = {}
+            if role == 'PGM':
+                # pyrefly: ignore [missing-attribute]
+                projects_handled = Project.objects.filter(program__project_manager_assigned=u, status__in=['Approved', 'Active', 'In Progress']).count()
+                # pyrefly: ignore [missing-attribute]
+                employees_managed = TeamMember.objects.filter(
+                    project__program__project_manager_assigned=u,
+                    project__status__in=['Approved', 'Active', 'In Progress']
+                ).values('user').distinct().count()
+                pending_sprints = Sprint.objects.filter(status='Pending Approval').count()
+                meetings_and_approvals = (projects_handled * 3) + pending_sprints
+                
+                assigned_fte = (projects_handled * 0.25) + (employees_managed * 0.05) + (meetings_and_approvals * 0.03)
+                extra_metrics = {
+                    "projects_handled": projects_handled,
+                    "employees_managed": employees_managed,
+                    "meetings_and_approvals": meetings_and_approvals
+                }
+            elif role == 'PM':
+                # pyrefly: ignore [missing-attribute]
+                active_tasks = Task.objects.filter(project__created_by=u, status__in=['In Progress', 'To Do']).count()
+                # pyrefly: ignore [missing-attribute]
+                team_coordination = TeamMember.objects.filter(project__created_by=u).values('user').distinct().count()
+                # pyrefly: ignore [missing-attribute]
+                active_sprints = Sprint.objects.filter(project__created_by=u, status='In Progress').count()
+                # pyrefly: ignore [missing-attribute]
+                overdue_tasks = Task.objects.filter(project__created_by=u, due_date__lt=today).exclude(status='Done').count()
+                reporting_deadline_management = (active_sprints * 2) + overdue_tasks
+                
+                assigned_fte = (active_tasks * 0.05) + (team_coordination * 0.08) + (reporting_deadline_management * 0.10)
+                extra_metrics = {
+                    "active_tasks": active_tasks,
+                    "team_coordination": team_coordination,
+                    "reporting_deadline_management": reporting_deadline_management
+                }
+            else: # TM
+                # pyrefly: ignore [missing-attribute]
+                assigned_fte = TeamMember.objects.filter(
+                    user=u,
+                    project__status__in=['Approved', 'Active', 'In Progress']
+                ).aggregate(total=Sum('fte_score'))['total'] or 0.0
+
+            assigned_fte = round(float(assigned_fte), 2)
             
             # 3. Total Calculated FTE (Month hours / 160)
             # pyrefly: ignore [missing-attribute]
@@ -1247,18 +1311,19 @@ def get_all_resources(request):
             completed_tasks = tasks.filter(status='Done').count()
             completion_rate = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0.0
             
-            # 5. Utilization Status
-            if role == 'TM':
-                if assigned_fte > 1.0:
-                    status = 'Overutilized'
-                elif assigned_fte >= 0.5:
-                    status = 'Optimal'
-                elif assigned_fte > 0.0:
-                    status = 'Underutilized'
-                else:
-                    status = 'Available'
+            # 5. Workload status mapping
+            if assigned_fte > 1.0:
+                workload_status = 'Overloaded'
+                workload_color = 'Red'
+                status = 'Overutilized'
+            elif assigned_fte >= 0.5:
+                workload_status = 'Busy'
+                workload_color = 'Yellow'
+                status = 'Optimal'
             else:
-                status = 'Active' if len(active_projects) > 0 else 'Available'
+                workload_status = 'Free'
+                workload_color = 'Green'
+                status = 'Underutilized' if assigned_fte > 0.0 else 'Available'
                 
             # 6. Performance Score
             score = (completion_rate * 0.7) + (min(float(assigned_fte), 2.0) * 15)
@@ -1270,12 +1335,15 @@ def get_all_resources(request):
                 "role": role,
                 "role_display": role_display,
                 "active_projects": active_projects,
-                "assigned_fte": round(float(assigned_fte), 2),
+                "assigned_fte": assigned_fte,
                 "calculated_fte": calculated_fte,
                 "total_tasks": total_tasks,
                 "completed_tasks": completed_tasks,
                 "completion_rate": completion_rate,
                 "utilization_status": status,
+                "workload_status": workload_status,
+                "workload_color": workload_color,
+                "extra_metrics": extra_metrics,
                 "performance_score": performance_score,
                 "phone": profile.phone or '',
                 "bio": profile.bio or ''
