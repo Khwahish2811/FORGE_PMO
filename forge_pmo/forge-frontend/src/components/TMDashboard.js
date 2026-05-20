@@ -3,6 +3,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import FocusMode from './common/FocusMode';
 import KanbanBoard from './common/KanbanBoard';
 import NotificationPanel from './common/NotificationPanel';
+import { Gantt, ViewMode } from 'gantt-task-react';
+import "gantt-task-react/dist/index.css";
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
