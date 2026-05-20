@@ -469,26 +469,40 @@ const TMDashboard = ({ user, onLogout }) => {
 
       {/* SIDEBAR */}
       <div style={sidebarStyle}>
-        <div style={{ ...logoSection, flexDirection: 'column', alignItems: 'flex-start', gap: '2px', paddingLeft: '15px' }}>
-        <span style={{ fontSize: '11px', fontWeight: '500', color: '#93c5fd', letterSpacing: '2px', textTransform: 'uppercase' }}>AM/NS</span>
-        <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>FORGE</span>
-      </div>
-
-        <div style={sidebarScrollArea}>
-            <div style={navGroup}>
-                <p style={navLabel}>NAVIGATION</p>
-                <div onClick={() => setActiveView('dashboard')} style={activeView === 'dashboard' ? navItemActive : navItem}> My Dashboard</div>
-            </div>
-            <div style={navGroup}>
-                <p style={navLabel}>MY PROJECTS</p>
-                {projects.map(proj => (
-                    <div key={proj.name} onClick={() => { setSelectedProjectId(proj.name); setActiveView('project'); }} style={activeView === 'project' && selectedProjectId === proj.name ? projectItemActive : projectItem}>
-                        <span style={{marginRight: '8px', color: activeView === 'project' && selectedProjectId === proj.name ? '#60A5FA' : '#cbd5e1'}}>•</span> 
-                        {proj.name}
-                    </div>
-                ))}
-            </div>
+        <div style={logoBox}>
+          <span style={{ fontSize: '11px', fontWeight: '500', color: '#93c5fd', letterSpacing: '2px', textTransform: 'uppercase' }}>AM/NS</span>
+          <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>FORGE</span>
         </div>
+        
+        <div style={sidebarScrollArea}>
+          <div style={{ padding: '0 20px 8px 20px', fontSize: '11px', color: '#88a3d4', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+            Navigation
+          </div>
+          <div
+            onClick={() => setActiveView('dashboard')}
+            style={activeView === 'dashboard' ? activeSbItem : sbItem}
+          >
+            My Dashboard
+          </div>
+
+          <div style={{ padding: '20px 20px 8px 20px', fontSize: '11px', color: '#88a3d4', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+            My Projects
+          </div>
+          {projects.map(proj => {
+            const isActive = activeView === 'project' && selectedProjectId === proj.name;
+            return (
+              <div
+                key={proj.name}
+                onClick={() => { setSelectedProjectId(proj.name); setActiveView('project'); }}
+                style={isActive ? activeSbItem : sbItem}
+              >
+                <span style={{ marginRight: '8px', color: isActive ? '#60A5FA' : '#cbd5e1' }}>•</span>
+                {proj.name}
+              </div>
+            );
+          })}
+        </div>
+
         <button onClick={onLogout} style={logoutBtnSide}>LOGOUT</button>
       </div>
 
@@ -900,22 +914,92 @@ const TMDashboard = ({ user, onLogout }) => {
 };
 
 // --- STYLES ---
-const layoutContainer = { display: 'flex', height: '100vh', backgroundColor: '#f8fafc', overflow: 'hidden', fontFamily: 'Inter, system-ui, sans-serif' };
-const sidebarStyle = { width: '260px', backgroundColor: '#1B3A6B', color: '#fff', padding: '25px', display: 'flex', flexDirection: 'column', flexShrink: 0, boxShadow: '4px 0 15px rgba(0,0,0,0.05)' };
-const logoSection = { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px' };
-const logoCircle = { width: '32px', height: '32px', background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', boxShadow: '0 4px 10px rgba(59,130,246,0.3)' };
-const logoText = { fontSize: '16px', fontWeight: '700', letterSpacing: '0.5px' };
-const sidebarScrollArea = { flex: 1, overflowY: 'auto' };
-const navGroup = { marginBottom: '35px' };
-const navLabel = { fontSize: '11px', color: '#64748B', marginBottom: '15px', fontWeight: '800', letterSpacing: '1px' };
-const navItem = { padding: '12px 18px', margin: '0 15px 5px 15px', borderRadius: '10px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', color: '#94a3b8' };
-const navItemActive = { padding: '12px 15px', borderRadius: '8px', fontSize: '14px', backgroundColor: 'rgba(59,130,246,0.1)', borderLeft: '4px solid #3B82F6', color: '#60A5FA', fontWeight: '600' };
-const projectItem = { padding: '10px 15px', cursor: 'pointer', borderRadius: '8px', marginBottom: '5px', color: '#94A3B8', fontSize: '14px', transition: 'all 0.2s' };
-const projectItemActive = { ...projectItem, backgroundColor: 'rgba(255,255,255,0.05)', color: '#fff', fontWeight: '600' };
-const logoutBtnSide = { marginTop: '20px', background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', padding: '12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', ':hover': {background: '#ef4444', color: '#fff'} };
-
-const mainContent = { flex: 1, overflowY: 'auto', backgroundColor: '#F4F7FB' };
-const topHeaderStyle = { padding: '30px 25px', background: 'linear-gradient(to right, #fff, #F4F7FB)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' };
+const layoutContainer = { 
+  display: 'flex', 
+  minHeight: '100vh', 
+  backgroundColor: '#f8fafc', 
+  fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
+  overflow: 'hidden'
+};
+const sidebarStyle = { 
+  width: '240px', 
+  backgroundColor: '#1B3A6B', 
+  color: '#fff', 
+  display: 'flex', 
+  flexDirection: 'column', 
+  flexShrink: 0, 
+  position: 'fixed', 
+  height: '100vh', 
+  left: 0, 
+  top: 0, 
+  zIndex: 100, 
+  borderRight: '1px solid #1e293b' 
+};
+const sidebarScrollArea = { 
+  flex: 1, 
+  overflowY: 'auto',
+  padding: '20px 0'
+};
+const logoBox = { 
+  display: 'flex', 
+  flexDirection: 'column', 
+  gap: '2px', 
+  padding: '25px 20px', 
+  borderBottom: '1px solid rgba(255,255,255,0.1)' 
+};
+const sbItem = {
+  padding: '12px 20px',
+  marginLeft: '10px',
+  marginRight: '10px',
+  marginBottom: '4px',
+  borderRadius: '8px',
+  fontSize: '13px',
+  fontWeight: '500',
+  color: '#cbd5e1',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  transition: 'all 0.2s',
+  borderLeft: '4px solid transparent',
+  fontFamily: "'Inter', 'Segoe UI', sans-serif"
+};
+const activeSbItem = {
+  ...sbItem,
+  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  color: '#fff',
+  fontWeight: '600',
+  borderLeft: '4px solid #60A5FA',
+  borderRadius: '0 8px 8px 0',
+  marginLeft: '0',
+  paddingLeft: '16px'
+};
+const topHeaderStyle = { 
+  padding: '20px 25px', 
+  background: '#fff', 
+  borderBottom: '1px solid #e2e8f0', 
+  display: 'flex', 
+  justifyContent: 'space-between', 
+  alignItems: 'center' 
+};
+const mainContent = { 
+  flex: 1, 
+  marginLeft: '240px', 
+  overflowY: 'auto', 
+  backgroundColor: '#F4F7FB', 
+  minHeight: '100vh' 
+};
+const logoutBtnSide = { 
+  margin: '20px 15px', 
+  background: 'transparent', 
+  border: '1px solid #ef4444', 
+  color: '#ef4444', 
+  padding: '12px', 
+  borderRadius: '8px', 
+  cursor: 'pointer', 
+  fontWeight: 'bold', 
+  transition: 'all 0.2s',
+  textAlign: 'center'
+};
 const topTitleStyle = { fontSize: '24px', fontWeight: '800', color: '#0F172A', margin: '0 0 5px 0' };
 const userAvatarStyle = { width: '45px', height: '45px', background: 'linear-gradient(135deg, #10B981, #3B82F6)', color: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '18px', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' };
 

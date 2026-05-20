@@ -552,7 +552,7 @@ const lastStatItem = {
   const insights = getSmartInsights();
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f7fa', fontFamily: 'Segoe UI, sans-serif' }}>
+    <div style={layoutContainer}>
       
       {/* PROFILE MODAL */}
       {showProfileModal && (
@@ -620,21 +620,53 @@ const lastStatItem = {
 
       {/* SIDEBAR */}
       <div style={sidebarStyle}>
-        <div style={{ ...logoBox, display: 'flex', flexDirection: 'column', gap: '2px', padding: '20px 25px' }}>
-        <span style={{ fontSize: '11px', fontWeight: '500', color: '#93c5fd', letterSpacing: '2px', textTransform: 'uppercase' }}>AM/NS</span>
-        <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>FORGE</span>
-      </div>
-        <div style={sbSecTitle}>Navigation</div>
-        <div style={{ ...sbItem, backgroundColor: activeTab === 'assignments' ? '#2563EB' : 'transparent', color: '#fff' }} onClick={() => { setActiveTab('assignments'); setShowProjectForm(false); }}>My Assignments</div>
-        <div style={{ ...sbItem, backgroundColor: activeTab === 'execution' ? '#2563EB' : 'transparent', color: '#fff' }} onClick={() => { setActiveTab('execution'); setShowProjectForm(false); }}>Project Execution</div>
-        <div style={{ ...sbItem, backgroundColor: activeTab === 'working_programs' ? '#2563EB' : 'transparent', color: '#fff' }} onClick={() => { setActiveTab('working_programs'); setShowProjectForm(false); }}>Working Programs</div>
-        <div style={{ ...sbItem, backgroundColor: activeTab === 'performance' ? '#2563EB' : 'transparent', color: '#fff' }} onClick={() => { setActiveTab('performance'); setShowProjectForm(false); }}>Team Performance</div>
-        <div style={{ ...sbItem, backgroundColor: activeTab === 'resource_analytics' ? '#2563EB' : 'transparent', color: '#fff' }} onClick={() => { setActiveTab('resource_analytics'); setShowProjectForm(false); }}>Resource Analytics</div>
+        <div style={logoBox}>
+          <span style={{ fontSize: '11px', fontWeight: '500', color: '#93c5fd', letterSpacing: '2px', textTransform: 'uppercase' }}>AM/NS</span>
+          <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>FORGE</span>
+        </div>
+        
+        <div style={sidebarScrollArea}>
+          <div style={{ padding: '0 20px 8px 20px', fontSize: '11px', color: '#88a3d4', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+            Navigation
+          </div>
+          <div
+            style={activeTab === 'assignments' ? activeSbItem : sbItem}
+            onClick={() => { setActiveTab('assignments'); setShowProjectForm(false); }}
+          >
+            My Assignments
+          </div>
+          <div
+            style={activeTab === 'execution' ? activeSbItem : sbItem}
+            onClick={() => { setActiveTab('execution'); setShowProjectForm(false); }}
+          >
+            Project Execution
+          </div>
+          <div
+            style={activeTab === 'working_programs' ? activeSbItem : sbItem}
+            onClick={() => { setActiveTab('working_programs'); setShowProjectForm(false); }}
+          >
+            Working Programs
+          </div>
+          <div
+            style={activeTab === 'performance' ? activeSbItem : sbItem}
+            onClick={() => { setActiveTab('performance'); setShowProjectForm(false); }}
+          >
+            Team Performance
+          </div>
+          <div
+            style={activeTab === 'resource_analytics' ? activeSbItem : sbItem}
+            onClick={() => { setActiveTab('resource_analytics'); setShowProjectForm(false); }}
+          >
+            Resource Analytics
+          </div>
+        </div>
+
+        <button onClick={onLogout} style={logoutBtnSide}>LOGOUT</button>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', marginLeft: '220px' }}>
+      <div style={mainContentStyle}>
         {/* HEADER */}
-        <div style={headerStyle}>
+        <div style={topHeaderStyle}>
           <span style={{ fontWeight: 700, color: '#1B3A6B' }}>Project Manager Dashboard</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             
@@ -661,7 +693,6 @@ const lastStatItem = {
                     {username?.charAt(0).toUpperCase() || 'U'}
                 </div>
             </div>
-            <button onClick={onLogout} style={logoutBtnStyle}>LOGOUT</button>
           </div>
         </div>
 
@@ -1515,13 +1546,92 @@ const lastStatItem = {
 };
 
 // --- PREMIUM STYLES (MATCHING PGM DESIGN) ---
-const sidebarStyle = { width: '220px', backgroundColor: '#1B3A6B', color: '#fff', display: 'flex', flexDirection: 'column', position: 'fixed', height: '100vh', left: 0, top: 0, zIndex: 100 };
-const logoBox = { padding: '25px', color: '#fff', fontSize: '24px', fontWeight: 'bold', borderBottom: '1px solid #2a4f8a', marginBottom: '20px' };
-const sbSecTitle = { fontSize: '10px', color: '#8ab0d8', textTransform: 'uppercase', padding: '10px 20px 8px' };
-const sbItem = { padding: '12px 20px', color: '#ccdaee', cursor: 'pointer', fontSize: '13px', transition: '0.3s', display: 'flex', alignItems: 'center', gap: '10px' };
-
-const headerStyle = { height: '65px', background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 25px', marginLeft: '220px', position: 'sticky', top: 0, zIndex: 90 };
-const logoutBtnStyle = { padding: '5px 10px', fontSize: '11px', cursor: 'pointer', background: '#EF4444', color: '#fff', border: 'none', borderRadius: '4px' };
+const layoutContainer = { 
+  display: 'flex', 
+  minHeight: '100vh', 
+  backgroundColor: '#f8fafc', 
+  fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
+  overflow: 'hidden'
+};
+const sidebarStyle = { 
+  width: '240px', 
+  backgroundColor: '#1B3A6B', 
+  color: '#fff', 
+  display: 'flex', 
+  flexDirection: 'column', 
+  flexShrink: 0, 
+  position: 'fixed', 
+  height: '100vh', 
+  left: 0, 
+  top: 0, 
+  zIndex: 100, 
+  borderRight: '1px solid #1e293b' 
+};
+const sidebarScrollArea = { 
+  flex: 1, 
+  overflowY: 'auto',
+  padding: '20px 0'
+};
+const logoBox = { 
+  display: 'flex', 
+  flexDirection: 'column', 
+  gap: '2px', 
+  padding: '25px 20px', 
+  borderBottom: '1px solid rgba(255,255,255,0.1)' 
+};
+const sbItem = {
+  padding: '12px 20px',
+  marginLeft: '10px',
+  marginRight: '10px',
+  marginBottom: '4px',
+  borderRadius: '8px',
+  fontSize: '13px',
+  fontWeight: '500',
+  color: '#cbd5e1',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  transition: 'all 0.2s',
+  borderLeft: '4px solid transparent',
+  fontFamily: "'Inter', 'Segoe UI', sans-serif"
+};
+const activeSbItem = {
+  ...sbItem,
+  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  color: '#fff',
+  fontWeight: '600',
+  borderLeft: '4px solid #60A5FA',
+  borderRadius: '0 8px 8px 0',
+  marginLeft: '0',
+  paddingLeft: '16px'
+};
+const topHeaderStyle = { 
+  padding: '20px 25px', 
+  background: '#fff', 
+  borderBottom: '1px solid #e2e8f0', 
+  display: 'flex', 
+  justifyContent: 'space-between', 
+  alignItems: 'center' 
+};
+const mainContentStyle = { 
+  flex: 1, 
+  marginLeft: '240px', 
+  overflowY: 'auto', 
+  backgroundColor: '#F4F7FB', 
+  minHeight: '100vh' 
+};
+const logoutBtnSide = { 
+  margin: '20px 15px', 
+  background: 'transparent', 
+  border: '1px solid #ef4444', 
+  color: '#ef4444', 
+  padding: '12px', 
+  borderRadius: '8px', 
+  cursor: 'pointer', 
+  fontWeight: 'bold', 
+  transition: 'all 0.2s',
+  textAlign: 'center'
+};
 const userCircleStyle = { width: '35px', height: '35px', borderRadius: '50%', backgroundColor: '#2563EB', color: '#fff', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold' };
 
 const sectionTitle = { fontSize: '16px', fontWeight: '800', color: '#1B3A6B', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' };

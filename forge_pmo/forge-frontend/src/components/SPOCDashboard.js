@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, LineChart, Line, CartesianGrid, BarChart, Bar, Legend } from 'recharts';
-import ResourceAnalytics from './common/ResourceAnalytics';
 import ProgramTrackerModal from './common/ProgramTrackerModal';
 
 const formatDate = (dateStr) => {
@@ -243,33 +242,31 @@ const SPOCDashboard = ({ username, onLogout }) => {
         </div>
       )}
       {/* SIDEBAR */}
-      <div style={{ ...sidebarStyle, width: '260px', display: 'flex', flexDirection: 'column', height: '100vh', borderRight: '1px solid #1e293b' }}>
-        <div style={{ ...logoBox, display: 'flex', flexDirection: 'column', gap: '2px', padding: '20px 25px' }}>
-        <span style={{ fontSize: '11px', fontWeight: '500', color: '#93c5fd', letterSpacing: '2px', textTransform: 'uppercase' }}>AM/NS</span>
-        <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>FORGE</span>
-      </div>
+      <div style={sidebarStyle}>
+        <div style={logoBox}>
+          <span style={{ fontSize: '11px', fontWeight: '500', color: '#93c5fd', letterSpacing: '2px', textTransform: 'uppercase' }}>AM/NS</span>
+          <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>FORGE</span>
+        </div>
         
-        <div style={{ padding: '20px 25px 8px 25px', fontSize: '11px', color: '#88a3d4', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
-          Program Workflow
+        <div style={sidebarScrollArea}>
+          <div style={{ padding: '0 20px 8px 20px', fontSize: '11px', color: '#88a3d4', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
+            Program Workflow
+          </div>
+          <div onClick={() => setActiveTab('pending')} style={activeTab === 'pending' ? activeSbItem : sbItem}> Pending Requests</div>
+          <div onClick={() => setActiveTab('history')} style={activeTab === 'history' ? activeSbItem : sbItem}> Approval History</div>
+          <div onClick={() => setActiveTab('reports')} style={activeTab === 'reports' ? activeSbItem : sbItem}> Live Tracking</div>
         </div>
-        <div onClick={() => setActiveTab('pending')} style={activeTab === 'pending' ? activeSbItem : sbItem}> Pending Requests</div>
-        <div onClick={() => setActiveTab('history')} style={activeTab === 'history' ? activeSbItem : sbItem}> Approval History</div>
-        <div onClick={() => setActiveTab('reports')} style={activeTab === 'reports' ? activeSbItem : sbItem}> Live Tracking</div>
 
-        <div style={{ padding: '25px 25px 8px 25px', fontSize: '11px', color: '#88a3d4', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
-          Resource Operations
-        </div>
-        <div onClick={() => setActiveTab('resource_analytics')} style={activeTab === 'resource_analytics' ? activeSbItem : sbItem}> Resource Analytics</div>
+        <button onClick={onLogout} style={logoutBtnSide}>LOGOUT</button>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+      <div style={mainContentStyle}>
         {/* HEADER */}
-        <div style={headerStyle}>
+        <div style={topHeaderStyle}>
           <span style={{ fontWeight: 700, color: '#1B3A6B' }}>Business SPOC Dashboard</span>
           <div style={{display:'flex', alignItems:'center', gap:'15px', cursor: 'pointer'}} onClick={() => setShowProfileModal(true)}>
             <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
             <div style={{ width: '35px', height: '35px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', fontWeight: 'bold' }}>{username?.charAt(0).toUpperCase() || 'U'}</div>
-            <button onClick={onLogout} style={logoutBtnStyle}>LOGOUT</button>
           </div>
         </div>
 
@@ -363,9 +360,7 @@ const SPOCDashboard = ({ username, onLogout }) => {
             </div>
           </div>
         )}
-        {activeTab === 'resource_analytics' && (
-          <ResourceAnalytics resources={resources} />
-        )}
+
 
       </div>
 
@@ -388,11 +383,85 @@ const StatBox = ({ label, val, color }) => (
 );
 
 // --- Styles ---
-const sidebarStyle = { width: '220px', backgroundColor: '#1B3A6B', color: '#fff' };
-const logoBox = { padding: '25px', fontSize: '22px', fontWeight: 'bold', borderBottom: '1px solid #2a4f8a' };
-const sbItem = { padding: '15px 25px', cursor: 'pointer', fontSize: '14px', borderLeft: '4px solid transparent', transition: '0.3s' };
-const activeSbItem = { ...sbItem, backgroundColor: '#2563EB', borderLeft: '4px solid #60a5fa', fontWeight: 'bold' };
-const headerStyle = { height: '70px', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px', borderBottom: '1px solid #ddd' };
+const sidebarStyle = { 
+  width: '240px', 
+  backgroundColor: '#1B3A6B', 
+  color: '#fff', 
+  display: 'flex', 
+  flexDirection: 'column', 
+  flexShrink: 0, 
+  position: 'fixed', 
+  height: '100vh', 
+  left: 0, 
+  top: 0, 
+  zIndex: 100, 
+  borderRight: '1px solid #1e293b' 
+};
+const sidebarScrollArea = { 
+  flex: 1, 
+  overflowY: 'auto',
+  padding: '20px 0'
+};
+const logoBox = { 
+  display: 'flex', 
+  flexDirection: 'column', 
+  gap: '2px', 
+  padding: '25px 20px', 
+  borderBottom: '1px solid rgba(255,255,255,0.1)' 
+};
+const sbItem = {
+  padding: '12px 20px',
+  marginLeft: '10px',
+  marginRight: '10px',
+  marginBottom: '4px',
+  borderRadius: '8px',
+  fontSize: '13px',
+  fontWeight: '500',
+  color: '#cbd5e1',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  transition: 'all 0.2s',
+  borderLeft: '4px solid transparent',
+  fontFamily: "'Inter', 'Segoe UI', sans-serif"
+};
+const activeSbItem = {
+  ...sbItem,
+  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  color: '#fff',
+  fontWeight: '600',
+  borderLeft: '4px solid #60A5FA',
+  borderRadius: '0 8px 8px 0',
+  marginLeft: '0',
+  paddingLeft: '16px'
+};
+const topHeaderStyle = { 
+  padding: '20px 25px', 
+  background: '#fff', 
+  borderBottom: '1px solid #e2e8f0', 
+  display: 'flex', 
+  justifyContent: 'space-between', 
+  alignItems: 'center' 
+};
+const mainContentStyle = { 
+  flex: 1, 
+  marginLeft: '240px', 
+  overflowY: 'auto', 
+  backgroundColor: '#F4F7FB', 
+  minHeight: '100vh' 
+};
+const logoutBtnSide = { 
+  margin: '20px 15px', 
+  background: 'transparent', 
+  border: '1px solid #ef4444', 
+  color: '#ef4444', 
+  padding: '12px', 
+  borderRadius: '8px', 
+  cursor: 'pointer', 
+  fontWeight: 'bold', 
+  transition: 'all 0.2s',
+  textAlign: 'center'
+};
 
 const logoutBtnStyle = { background: '#EF4444', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' };
 const cardGrid = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px', padding: '30px' };
