@@ -5,6 +5,21 @@ import PGMDashboard from './components/PGMDashboard';
 import PMDashboard from './components/PMDashboard';
 import TMDashboard from './components/TMDashboard';
 
+// --- Global Fetch Interceptor for Authentication ---
+const originalFetch = window.fetch;
+window.fetch = async (url, options = {}) => {
+  const token = localStorage.getItem('token');
+  options.headers = {
+    ...options.headers,
+  };
+  
+  if (token) {
+    options.headers['Authorization'] = `Token ${token}`;
+  }
+  
+  return originalFetch(url, options);
+};
+
 function App() {
   const [auth, setAuth] = useState({
     isLoggedIn: false,
@@ -25,9 +40,10 @@ function App() {
     }
   }, []);
 
-  const handleLogin = (username, role) => {
+  const handleLogin = (username, role, token) => {
     localStorage.setItem('user', username);
     localStorage.setItem('role', role);
+    localStorage.setItem('token', token);
     setAuth({
       isLoggedIn: true,
       username: username,
@@ -38,6 +54,7 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('user');
     localStorage.removeItem('role');
+    localStorage.removeItem('token');
     setAuth({ isLoggedIn: false, username: null, role: null });
   };
 

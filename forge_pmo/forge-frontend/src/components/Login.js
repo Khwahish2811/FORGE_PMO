@@ -16,7 +16,7 @@ const Login = ({ onLogin }) => {
       });
       const data = await response.json();
       if (data.success) {
-        onLogin(data.username, data.role);
+        onLogin(data.username, data.role, data.token);
       } else {
         setErrorMsg(' Invalid Username or Password! Please check your credentials.');
       }

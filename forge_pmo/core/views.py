@@ -9,7 +9,9 @@ from django.views.decorators.csrf import csrf_exempt
 # pyrefly: ignore [untyped-import]
 from django.db import transaction
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from .models import Program, Project, Task, Sprint, TeamMember, DailyEffortLog, Profile, Notification
 from .serializers import ProjectSerializer, ProgramSerializer, TaskSerializer
@@ -40,6 +42,7 @@ logger = logging.getLogger(__name__)
 # --- 1. AUTHENTICATION ---
 @csrf_exempt
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def login_api(request):
     try:
         data = request.data
@@ -50,8 +53,10 @@ def login_api(request):
         user = authenticate(username=username, password=password)
         if user is not None:
             user_role = getattr(user.profile, 'role', 'TM')
+            token, created = Token.objects.get_or_create(user=user)
             return Response({
                 'success': True,
+                'token': token.key,
                 'username': user.username,
                 'role': user_role
             })
