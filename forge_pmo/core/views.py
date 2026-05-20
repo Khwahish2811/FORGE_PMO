@@ -1111,6 +1111,7 @@ def review_additional_sprint(request):
                 )
         else:
             sprint.status = 'Returned'
+            sprint.return_note = return_note
             sprint.save()
             
             # Notify PM

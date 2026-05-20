@@ -26,6 +26,6 @@ class Sprint(models.Model):
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=50, default='Planned')
-
+    return_note = models.TextField(null=True, blank=True)
     def __str__(self):
         return f"{self.name} - {self.project.name}"

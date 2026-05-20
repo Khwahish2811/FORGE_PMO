@@ -39,7 +39,7 @@ class SprintSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Sprint
-        fields = ['id', 'name', 'start_date', 'end_date', 'status', 'todo_count', 'progress_count', 'done_count']
+        fields = ['id', 'name', 'start_date', 'end_date', 'status', 'return_note', 'todo_count', 'progress_count', 'done_count']
 
     def get_todo_count(self, obj):
         return obj.tasks.filter(status='To Do').count()
