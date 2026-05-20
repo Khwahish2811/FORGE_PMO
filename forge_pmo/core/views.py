@@ -1011,6 +1011,7 @@ def post_project_update_note(request):
 def request_additional_sprint(request):
     from datetime import datetime
     project_id = request.data.get('project_id')
+    sprint_id = request.data.get('sprint_id')
     name = request.data.get('name')
     start_date = request.data.get('start_date')
     end_date = request.data.get('end_date')
@@ -1023,13 +1024,24 @@ def request_additional_sprint(request):
         if s_date < project.start_date or e_date > project.end_date:
             return Response({"error": f"Sprint timeline must be within project timeline ({project.start_date} to {project.end_date})"}, status=400)
             
-        sprint = Sprint.objects.create(
-            project=project,
-            name=name,
-            start_date=start_date,
-            end_date=end_date,
-            status='Pending Approval'
-        )
+        if sprint_id:
+            sprint = Sprint.objects.get(id=sprint_id)
+            sprint.name = name
+            sprint.start_date = start_date
+            sprint.end_date = end_date
+            sprint.status = 'Pending Approval'
+            sprint.return_note = ''
+            sprint.save()
+            action_msg = "resubmitted"
+        else:
+            sprint = Sprint.objects.create(
+                project=project,
+                name=name,
+                start_date=start_date,
+                end_date=end_date,
+                status='Pending Approval'
+            )
+            action_msg = "requested"
         
         # Notify Program Manager (PGM)
         from django.contrib.auth.models import User
@@ -1037,12 +1049,14 @@ def request_additional_sprint(request):
         for pgm_user in pgm_users:
             Notification.objects.create(
                 user=pgm_user,
-                message=f"NEW_SPRINT: Additional sprint '{name}' requested for active project '{project.name}' by PM."
+                message=f"SPRINT_UPDATE: Sprint '{name}' was {action_msg} for active project '{project.name}' by PM."
             )
             
-        return Response({"success": True, "message": "Sprint request submitted for PGM approval"})
+        return Response({"success": True, "message": f"Sprint successfully {action_msg} for PGM approval"})
     except Project.DoesNotExist:
         return Response({"error": "Project not found"}, status=404)
+    except Sprint.DoesNotExist:
+        return Response({"error": "Sprint not found"}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 

@@ -94,10 +94,11 @@ const PMDashboard = ({ username, onLogout }) => {
   const [updateNoteText, setUpdateNoteText] = useState('');
 
   const [showSprintModal, setShowSprintModal] = useState(false);
-  const [selectedProjectForSprint, setSelectedProjectForSprint] = useState(null);
   const [sprintName, setSprintName] = useState('');
   const [sprintStartDate, setSprintStartDate] = useState('');
   const [sprintEndDate, setSprintEndDate] = useState('');
+  const [selectedProjectForSprint, setSelectedProjectForSprint] = useState(null);
+  const [sprintIdToUpdate, setSprintIdToUpdate] = useState(null);
 
   const [stats, setStats] = useState({
     active_tasks: 0,
@@ -327,16 +328,18 @@ const lastStatItem = {
           project_id: selectedProjectForSprint.id,
           name: sprintName,
           start_date: sprintStartDate,
-          end_date: sprintEndDate
+          end_date: sprintEndDate,
+          sprint_id: sprintIdToUpdate
         })
       });
       const data = await res.json();
       if (res.ok) {
-        showToast('Sprint request submitted for PGM approval!', 'success');
+        showToast(data.message || 'Sprint request submitted for PGM approval!', 'success');
         setShowSprintModal(false);
         setSprintName('');
         setSprintStartDate('');
         setSprintEndDate('');
+        setSprintIdToUpdate(null);
         fetchData(true);
       } else {
         showToast(data.error || 'Failed to submit sprint request.', 'error');
@@ -869,6 +872,10 @@ const lastStatItem = {
                                     </button>
                                     <button
                                       onClick={() => {
+                                        setSprintIdToUpdate(null);
+                                        setSprintName('');
+                                        setSprintStartDate('');
+                                        setSprintEndDate('');
                                         setSelectedProjectForSprint(project);
                                         setShowSprintModal(true);
                                       }}
@@ -940,7 +947,27 @@ const lastStatItem = {
                                               <tr key={idx} style={miniTrStyle}>
                                                 <td style={miniTdStyle}>{s.name}</td>
                                                 <td style={miniTdStyle}>{formatDate(s.start_date)} to {formatDate(s.end_date)}</td>
-                                                <td style={miniTdStyle}>{statusBadge}</td>
+                                                <td style={miniTdStyle}>
+                                                  {statusBadge}
+                                                  {s.status === 'Returned' && (
+                                                    <div style={{ marginTop: '5px' }}>
+                                                      {s.return_note && <div style={{ fontSize: '11px', color: '#b91c1c', marginBottom: '4px' }}><strong>Note:</strong> {s.return_note}</div>}
+                                                      <button 
+                                                        onClick={() => {
+                                                          setSprintIdToUpdate(s.id);
+                                                          setSprintName(s.name);
+                                                          setSprintStartDate(s.start_date);
+                                                          setSprintEndDate(s.end_date);
+                                                          setSelectedProjectForSprint(project);
+                                                          setShowSprintModal(true);
+                                                        }}
+                                                        style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '4px', fontSize: '10px', cursor: 'pointer' }}
+                                                      >
+                                                        Update Sprint
+                                                      </button>
+                                                    </div>
+                                                  )}
+                                                </td>
                                               </tr>
                                             );
                                           }) || <tr><td colSpan="3">No sprints</td></tr>}
@@ -1479,7 +1506,7 @@ const lastStatItem = {
         <div style={modalOverlayStyle}>
           <div style={{ ...modalContentStyle, width: '500px', padding: '0', borderRadius: '16px', overflow: 'hidden', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
             <div style={{ background: '#0891b2', padding: '20px 30px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>Request Additional Sprint</h3>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>{sprintIdToUpdate ? 'Update Returned Sprint' : 'Request Additional Sprint'}</h3>
               <button onClick={() => setShowSprintModal(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', opacity: 0.8 }}>✕</button>
             </div>
             <div style={{ padding: '30px' }}>
@@ -1526,7 +1553,7 @@ const lastStatItem = {
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button onClick={() => setShowSprintModal(false)} style={{ background: '#f1f5f9', color: '#475569', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
-                <button onClick={handleAddSprint} style={{ background: '#0891b2', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Request Sprint</button>
+                <button onClick={handleAddSprint} style={{ background: '#0891b2', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>{sprintIdToUpdate ? 'Update Sprint' : 'Request Sprint'}</button>
               </div>
             </div>
           </div>
