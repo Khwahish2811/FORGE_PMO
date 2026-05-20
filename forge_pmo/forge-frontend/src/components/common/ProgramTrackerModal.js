@@ -36,8 +36,8 @@ const chartContainer = { background: '#fff', padding: '15px', borderRadius: '10p
 const chartHeader = { margin: '0 0 15px 0', fontSize: '13px', color: '#1e293b' };
 const legendContainer = { display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '11px', marginTop: '10px' };
 
-const ProgramTrackerModal = ({ showTrackerModal, selectedProgramStats, onClose }) => {
-  if (!showTrackerModal || !selectedProgramStats) return null;
+const ProgramTrackerModal = ({ isOpen, selectedProgramStats, onClose }) => {
+  if (!isOpen || !selectedProgramStats) return null;
 
   const handleDownloadReport = () => {
     let csv = "Program Name,Project Manager,Overall Progress,Total Tasks,Completed Tasks,Team Members\n";
