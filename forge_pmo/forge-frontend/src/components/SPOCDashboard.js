@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, LineChart, Line, CartesianGrid, BarChart, Bar, Legend } from 'recharts';
-import { Gantt, ViewMode } from 'gantt-task-react';
-import "gantt-task-react/dist/index.css";
+import ResourceAnalytics from './common/ResourceAnalytics';
+import ProgramTrackerModal from './common/ProgramTrackerModal';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
