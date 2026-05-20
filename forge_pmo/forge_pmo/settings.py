@@ -145,4 +145,48 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+}
+
+AUTHENTICATION_BACKENDS = [
+    'core.auth_backends.LDAPBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+LDAP_SERVER_URI = 'ldap://ldap.company.com:389'
+LDAP_USER_DN_TEMPLATE = 'cn={username},ou=users,dc=company,dc=com'
+LDAP_MOCK_AUTHENTICATION = True
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': 'forge_pmo.log',
+            'formatter': 'verbose',
+        },
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'core': {
+            'handlers': ['file', 'console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
 }

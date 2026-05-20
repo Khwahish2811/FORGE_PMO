@@ -71,6 +71,26 @@ const Login = ({ onLogin }) => {
             </div>
           )}
 
+          <div style={{
+            background: '#f0f7ff',
+            border: '1px solid #cce3fd',
+            borderRadius: '4px',
+            padding: '10px 12px',
+            marginBottom: '20px',
+            fontSize: '11px',
+            color: '#1e3a8a',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px',
+            lineHeight: '1.4'
+          }}>
+            <span style={{ fontSize: '13px', lineHeight: '1' }}>🔒</span>
+            <div>
+              <strong style={{ display: 'block', color: '#1B3A6B', marginBottom: '2px' }}>Centralized LDAP Authentication</strong>
+              <span style={{ color: '#4b5563' }}>Log in securely using your official company credentials.</span>
+            </div>
+          </div>
+
           <button type="submit" style={{ width: '100%', padding: '12px', background: '#1B3A6B', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
             LOGIN
           </button>

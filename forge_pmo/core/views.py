@@ -49,17 +49,22 @@ def login_api(request):
         username = data.get('username')
         password = data.get('password')
         if not username or not password:
+            logger.warning("Login attempt with missing username or password")
             return Response({'success': False, 'message': 'Username/Password missing'}, status=400)
+        
+        logger.info(f"Login attempt for user: {username}")
         user = authenticate(username=username, password=password)
         if user is not None:
             user_role = getattr(user.profile, 'role', 'TM')
             token, created = Token.objects.get_or_create(user=user)
+            logger.info(f"Login successful for user: {username} (Role: {user_role})")
             return Response({
                 'success': True,
                 'token': token.key,
                 'username': user.username,
                 'role': user_role
             })
+        logger.warning(f"Login failed for user: {username} - Invalid Credentials")
         return Response({'success': False, 'message': 'Invalid Credentials'}, status=401)
     except Exception as e:
         logger.error(f"LOGIN ERROR: {str(e)}")
@@ -75,16 +80,16 @@ def get_all_programs(request):
         serializer = ProgramSerializer(programs, many=True)
         return Response(serializer.data, status=200)
     except Exception as e:
-        print(f"ERROR IN GET_ALL_PROGRAMS: {str(e)}")
+        logger.error(f"ERROR IN GET_ALL_PROGRAMS: {str(e)}")
         return Response([], status=200)
 
 
 @api_view(['POST'])
 def create_program(request):
     try:
-        # Debugging prints
-        print(f"FILES: {request.FILES}")
-        print(f"DATA: {request.data}")
+        logger.info(f"Create program requested by user: {request.user}")
+        logger.debug(f"FILES: {request.FILES}")
+        logger.debug(f"DATA: {request.data}")
         
         program = Program.objects.create(
             name=request.data.get('name'),
@@ -100,7 +105,7 @@ def create_program(request):
             "document": str(program.document)
         }, status=201)
     except Exception as e:
-        print(f"CREATE PROGRAM ERROR: {str(e)}")
+        logger.error(f"CREATE PROGRAM ERROR: {str(e)}")
         return Response({"success": False, "error": str(e)}, status=400)
 
 
@@ -547,7 +552,7 @@ def log_daily_effort(request):
         return Response({"success": False, "message": "User not found"}, status=404)
     except Exception as e:
         # Error logging for debugging
-        print(f"Log Effort Error: {str(e)}")
+        logger.error(f"Log Effort Error: {str(e)}")
         return Response({"success": False, "message": str(e)}, status=500)
 
 
@@ -722,7 +727,7 @@ def get_dashboard_stats(request):
         return Response(stats_data, status=200)
 
     except Exception as e:
-        print(f"DEBUG ERROR: {str(e)}")
+        logger.error(f"DEBUG ERROR in get_dashboard_stats: {str(e)}")
         return Response(stats_data, status=200)
 
 # --- FIXED PGM DASHBOARD STATS WITH GANTT & VELOCITY ---
@@ -902,9 +907,7 @@ def get_working_programs(request):
 
         return Response(working_programs_data, status=200)
     except Exception as e:
-        logger.error(f"WORKING PROGRAMS ERROR: {str(e)}")
-
-        print(f"Error in get_working_programs: {e}")
+        logger.error(f"Error in get_working_programs: {str(e)}")
         return Response([], status=200)
 
 @api_view(['GET'])
