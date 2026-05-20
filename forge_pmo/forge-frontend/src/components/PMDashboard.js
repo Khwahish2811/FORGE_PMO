@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, LineChart, Line, AreaChart, Area, CartesianGrid, BarChart, Bar, Legend } from 'recharts';
 import NotificationPanel from './common/NotificationPanel';
 import ResourceAnalytics from './common/ResourceAnalytics';
@@ -63,8 +63,14 @@ const PMDashboard = ({ username, onLogout }) => {
   });
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const prevNotificationsCount = useRef(0);
   const [teamPerformance, setTeamPerformance] = useState([]);
   const [selectedMemberDetail, setSelectedMemberDetail] = useState(null);
+
+  const showToast = useCallback((msg, type = 'success') => {
+    setToastMessage({ msg, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  }, []);
 
   // --- RESOURCE ANALYTICS STATES ---
   const [resources, setResources] = useState([]);
@@ -110,7 +116,14 @@ const PMDashboard = ({ username, onLogout }) => {
       const progRes = await fetch(`http://127.0.0.1:8000/api/my-assigned-programs/?username=${username || 'rahul_pm'}`);
       if (progRes.ok) {
         const data = await progRes.json();
-        setAssignedPrograms(data);
+        // Sort data: 'Build Plan' and 'Returned' first
+        const sortedData = data.sort((a, b) => {
+          const priority = { 'Build Plan': 1, 'Returned': 2, 'Approved': 3, 'Waiting': 4, 'Updated Plan Sent': 5, 'In Progress': 6 };
+          const valA = priority[a.status_label] || 99;
+          const valB = priority[b.status_label] || 99;
+          return valA - valB;
+        });
+        setAssignedPrograms(sortedData);
       }
       const empRes = await fetch('http://127.0.0.1:8000/api/get-team-members/');
       if (empRes.ok) {
@@ -156,9 +169,21 @@ const PMDashboard = ({ username, onLogout }) => {
   const fetchNotifications = useCallback(async () => {
       try {
           const res = await fetch(`http://127.0.0.1:8000/api/get-notifications/?username=${username}`);
-          if (res.ok) setNotifications(await res.json());
+          if (res.ok) {
+              const data = await res.json();
+              if (data.length > prevNotificationsCount.current) {
+                  const newCount = data.length - prevNotificationsCount.current;
+                  for (let i = 0; i < newCount; i++) {
+                      if (data[i]) {
+                          showToast(`🔔 Notification: ${data[i].message}`, 'success');
+                      }
+                  }
+              }
+              setNotifications(data);
+              prevNotificationsCount.current = data.length;
+          }
       } catch (err) { console.error("Notification fetch error:", err); }
-  }, [username]);
+  }, [username, showToast]);
 
 
   const fetchTeamPerformance = useCallback(async () => {
@@ -474,10 +499,7 @@ const lastStatItem = {
     document.body.removeChild(a);
   };
 
-  const showToast = (msg, type = 'success') => {
-    setToastMessage({ msg, type });
-    setTimeout(() => setToastMessage(null), 4000);
-  };
+
 
 
 
@@ -671,21 +693,12 @@ const lastStatItem = {
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             
             {/* NOTIFICATION BELL */}
-            <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => { setShowNotifications(!showNotifications); if (!showNotifications) markRead(); }}>
-                <span style={{ fontSize: '22px' }}></span>
-                {notifications.length > 0 && (
-                    <span style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#ef4444', color: '#fff', fontSize: '10px', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', border: '2px solid #fff' }}>
-                        {notifications.length}
-                    </span>
-                )}
-                
-                {/* NOTIFICATION DROPDOWN */}
-                <NotificationPanel
-                  isOpen={showNotifications}
-                  notifications={notifications}
-                  onClose={() => setShowNotifications(false)}
-                />
-            </div>
+            <NotificationPanel
+              notifications={notifications}
+              showNotifications={showNotifications}
+              setShowNotifications={setShowNotifications}
+              markRead={markRead}
+            />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} onClick={() => setShowProfileModal(true)}>
                 <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
@@ -1024,55 +1037,97 @@ const lastStatItem = {
                     <table style={tableStyle}>
                       <thead style={theadStyle}><tr><th style={thStyle}>PROGRAM NAME</th><th style={thStyle}>TIMELINE</th><th style={thStyle}>ASSIGNED BY</th><th style={thStyle}>ACTION</th></tr></thead>
                       <tbody>
-                        {assignedPrograms.map((pgm) => (
-                          <tr key={pgm.id} style={trStyle}>
-                            <td style={tdStyle}>
-                              <b>{pgm.name}</b>
-                              {pgm.description && <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', maxWidth: '350px', lineHeight: '1.4' }}>{pgm.description}</div>}
-                              {pgm.document && (
-                                  <div style={{ marginTop: '8px' }}>
-                                      <a href={pgm.document} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#2563EB', textDecoration: 'none', background: '#EFF6FF', padding: '4px 10px', borderRadius: '6px', border: '1px solid #BFDBFE', fontWeight: 'bold' }}>
-                                          📎 View Reference Document
-                                      </a>
-                                  </div>
-                              )}
-                            </td>
-                            <td style={tdStyle}>{formatDate(pgm.start_date)} to {formatDate(pgm.end_date)}</td>
-                            <td style={tdStyle}>{pgm.manager_name || 'System Assigned'}</td>
-                                                       <td style={tdStyle}>
-    <button
-        onClick={() => {
-            if (pgm.status_label === 'Approved') {
-                handleStartWorking(pgm);
-            } else {
-                handleBuildPlan(pgm);
-            }
-        }}
-        style={{
-            ...primBtn,
-            backgroundColor: pgm.status_label === 'Approved' ? '#10b981' : '#2563eb',
-            opacity: pgm.status_label === 'Build Plan' || pgm.status_label === 'Rejected' || pgm.status_label === 'Returned' || pgm.status_label === 'Approved' ? 1 : 0.7,
-            cursor: pgm.status_label === 'Build Plan' || pgm.status_label === 'Rejected' || pgm.status_label === 'Returned' || pgm.status_label === 'Approved' ? 'pointer' : 'not-allowed'
-        }}
-        disabled={pgm.status_label === 'Waiting' || pgm.status_label === 'In Progress' || pgm.status_label === 'Updated Plan Sent'}
-    >
-        {/* ... */}
-        {pgm.status_label === 'Build Plan' ? '+ Build Plan' :
-         pgm.status_label === 'Waiting' ? ' Waiting Approval' :
-         pgm.status_label === 'Updated Plan Sent' ? ' Updated Plan Sent' :
-         pgm.status_label === 'Approved' ? ' Start Working' :
-         pgm.status_label === 'In Progress' ? ' In Progress' :
-         pgm.status_label === 'Rejected' ? ' Rejected (Re-build)' :
-         pgm.status_label === 'Returned' ? ' Returned (Update Plan)' : pgm.status_label}
-    </button>
-    {pgm.status_label === 'Returned' && pgm.return_note && (
-        <div style={{ marginTop: '5px', fontSize: '11px', color: '#991b1b', background: '#fee2e2', padding: '6px', borderRadius: '4px', border: '1px solid #fca5a5' }}>
-            <strong>Note from Manager:</strong> {pgm.return_note}
-        </div>
-    )}
-</td>
-                          </tr>
-                        ))}
+                        {assignedPrograms.map((pgm) => {
+                          const isNew = pgm.status_label === 'Build Plan';
+                          const isReturned = pgm.status_label === 'Returned';
+                          return (
+                            <tr
+                              key={pgm.id}
+                              style={{
+                                ...trStyle,
+                                backgroundColor: isNew ? '#F0F9FF' : isReturned ? '#FEF2F2' : '#fff',
+                                borderLeft: isNew ? '4px solid #3B82F6' : isReturned ? '4px solid #EF4444' : '4px solid transparent'
+                              }}
+                            >
+                              <td style={tdStyle}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <b style={{ color: '#1E293B' }}>{pgm.name}</b>
+                                  {isNew && (
+                                    <span style={{
+                                      background: 'linear-gradient(135deg, #3B82F6, #60A5FA)',
+                                      color: '#fff',
+                                      fontSize: '9px',
+                                      padding: '2px 8px',
+                                      borderRadius: '12px',
+                                      fontWeight: '800',
+                                      textTransform: 'uppercase',
+                                      letterSpacing: '0.5px',
+                                      boxShadow: '0 2px 4px rgba(59,130,246,0.3)'
+                                    }}>
+                                      New Assignment
+                                    </span>
+                                  )}
+                                  {isReturned && (
+                                    <span style={{
+                                      background: 'linear-gradient(135deg, #EF4444, #F87171)',
+                                      color: '#fff',
+                                      fontSize: '9px',
+                                      padding: '2px 8px',
+                                      borderRadius: '12px',
+                                      fontWeight: '800',
+                                      textTransform: 'uppercase',
+                                      letterSpacing: '0.5px',
+                                      boxShadow: '0 2px 4px rgba(239,68,68,0.3)'
+                                    }}>
+                                      Returned Plan
+                                    </span>
+                                  )}
+                                </div>
+                                {pgm.description && <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', maxWidth: '350px', lineHeight: '1.4' }}>{pgm.description}</div>}
+                                {pgm.document && (
+                                    <div style={{ marginTop: '8px' }}>
+                                        <a href={pgm.document} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#2563EB', textDecoration: 'none', background: '#EFF6FF', padding: '4px 10px', borderRadius: '6px', border: '1px solid #BFDBFE', fontWeight: 'bold' }}>
+                                            📎 View Reference Document
+                                        </a>
+                                    </div>
+                                )}
+                              </td>
+                              <td style={tdStyle}>{formatDate(pgm.start_date)} to {formatDate(pgm.end_date)}</td>
+                              <td style={tdStyle}>{pgm.manager_name || 'System Assigned'}</td>
+                              <td style={tdStyle}>
+                                <button
+                                    onClick={() => {
+                                        if (pgm.status_label === 'Approved') {
+                                            handleStartWorking(pgm);
+                                        } else {
+                                            handleBuildPlan(pgm);
+                                        }
+                                    }}
+                                    style={{
+                                        ...primBtn,
+                                        backgroundColor: pgm.status_label === 'Approved' ? '#10b981' : '#2563eb',
+                                        opacity: pgm.status_label === 'Build Plan' || pgm.status_label === 'Rejected' || pgm.status_label === 'Returned' || pgm.status_label === 'Approved' ? 1 : 0.7,
+                                        cursor: pgm.status_label === 'Build Plan' || pgm.status_label === 'Rejected' || pgm.status_label === 'Returned' || pgm.status_label === 'Approved' ? 'pointer' : 'not-allowed'
+                                    }}
+                                    disabled={pgm.status_label === 'Waiting' || pgm.status_label === 'In Progress' || pgm.status_label === 'Updated Plan Sent'}
+                                >
+                                    {pgm.status_label === 'Build Plan' ? '+ Build Plan' :
+                                     pgm.status_label === 'Waiting' ? ' Waiting Approval' :
+                                     pgm.status_label === 'Updated Plan Sent' ? ' Updated Plan Sent' :
+                                     pgm.status_label === 'Approved' ? ' Start Working' :
+                                     pgm.status_label === 'In Progress' ? ' In Progress' :
+                                     pgm.status_label === 'Rejected' ? ' Rejected (Re-build)' :
+                                     pgm.status_label === 'Returned' ? ' Returned (Update Plan)' : pgm.status_label}
+                                </button>
+                                {pgm.status_label === 'Returned' && pgm.return_note && (
+                                    <div style={{ marginTop: '5px', fontSize: '11px', color: '#991b1b', background: '#fee2e2', padding: '6px', borderRadius: '4px', border: '1px solid #fca5a5' }}>
+                                        <strong>Note from Manager:</strong> {pgm.return_note}
+                                    </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

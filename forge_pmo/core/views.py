@@ -118,6 +118,21 @@ def update_program_status(request):
         program = Program.objects.get(id=pgm_id)
         program.status = new_status
         program.save()
+        
+        # Notify PGM users about the SPOC's action
+        pgm_users = User.objects.filter(profile__role='PGM')
+        for pgm_user in pgm_users:
+            if new_status == 'Approved':
+                Notification.objects.create(
+                    user=pgm_user,
+                    message=f"PROGRAM_APPROVED: The program request '{program.name}' has been APPROVED by the Business SPOC."
+                )
+            else:
+                Notification.objects.create(
+                    user=pgm_user,
+                    message=f"PROGRAM_REJECTED: The program request '{program.name}' was marked as '{new_status}' by the Business SPOC."
+                )
+                
         return Response({'success': True})
     # pyrefly: ignore [missing-attribute]
     except Program.DoesNotExist:
@@ -137,6 +152,13 @@ def assign_project_manager(request):
         program.manager_name = pgm_name_from_react
         program.history_log = f"PM {pm_user.username} assigned by {pgm_name_from_react}."
         program.save()
+        
+        # Create a notification for the newly assigned PM
+        Notification.objects.create(
+            user=pm_user,
+            message=f"NEW_ASSIGNMENT: You have been assigned as the Project Manager for program '{program.name}' by PGM {pgm_name_from_react}."
+        )
+        
         return Response({"success": True})
     except Exception as e:
         return Response({"success": False, "error": str(e)}, status=404)
@@ -310,6 +332,26 @@ def approve_project_plan(request):
             project.status = 'Rejected'
 
         project.save()
+        
+        # Notify the Project Manager
+        pm_user = project.program.project_manager_assigned or project.created_by
+        if pm_user:
+            if decision == 'approve':
+                Notification.objects.create(
+                    user=pm_user,
+                    message=f"PLAN_APPROVED: The project plan for program '{project.program.name}' has been APPROVED by the Program Manager."
+                )
+            elif decision == 'return':
+                Notification.objects.create(
+                    user=pm_user,
+                    message=f"PLAN_RETURNED: The project plan for program '{project.program.name}' was returned for updates. Note: {return_note}"
+                )
+            else:
+                Notification.objects.create(
+                    user=pm_user,
+                    message=f"PLAN_REJECTED: The project plan for program '{project.program.name}' was REJECTED by the Program Manager."
+                )
+
         return Response({"success": True, "message": f"Project is now {project.status}"})
     # pyrefly: ignore [missing-attribute]
     except Project.DoesNotExist:

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } from 'recharts';
 import FocusMode from './common/FocusMode';
 import KanbanBoard from './common/KanbanBoard';
+import NotificationPanel from './common/NotificationPanel';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
@@ -55,11 +56,25 @@ const TMDashboard = ({ user, onLogout }) => {
 
   const [newProjectCount, setNewProjectCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const prevNotificationsCount = useRef(0);
 
   const fetchNotifications = useCallback(async () => {
     try {
       const res = await fetch(`http://127.0.0.1:8000/api/get-notifications/?username=${user}`);
-      if (res.ok) setNotifications(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        if (data.length > prevNotificationsCount.current) {
+          const newCount = data.length - prevNotificationsCount.current;
+          for (let i = 0; i < newCount; i++) {
+            if (data[i]) {
+              showToast(`🔔 Notification: ${data[i].message}`, 'success');
+            }
+          }
+        }
+        setNotifications(data);
+        prevNotificationsCount.current = data.length;
+      }
     } catch (err) { console.error("Notif fetch error:", err); }
   }, [user]);
 
@@ -200,6 +215,7 @@ const TMDashboard = ({ user, onLogout }) => {
         });
         setNotifications([]);
         setNewProjectCount(0);
+        prevNotificationsCount.current = 0;
       } catch (err) {
         console.error("Error clearing notifications:", err);
       }
@@ -513,8 +529,16 @@ const TMDashboard = ({ user, onLogout }) => {
                <h2 style={topTitleStyle}>Hello, {user} </h2>
                <p style={{margin: 0, fontSize: '13px', color: '#64748B'}}>Here is your personalized workspace.</p>
             </div>
-            <div style={{...userAvatarStyle, cursor: 'pointer'}} onClick={() => setShowProfileModal(true)} title="View Profile">
-                {user?.charAt(0).toUpperCase()}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                <NotificationPanel
+                  notifications={notifications}
+                  showNotifications={showNotifications}
+                  setShowNotifications={setShowNotifications}
+                  markRead={clearNotifications}
+                />
+                <div style={{...userAvatarStyle, cursor: 'pointer'}} onClick={() => setShowProfileModal(true)} title="View Profile">
+                    {user?.charAt(0).toUpperCase()}
+                </div>
             </div>
         </div>
 

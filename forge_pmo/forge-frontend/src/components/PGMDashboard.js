@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, LineChart, Line, CartesianGrid, Legend } from 'recharts';
 
 import ProgramTrackerModal from './common/ProgramTrackerModal';
 import ResourceAnalytics from './common/ResourceAnalytics';
+import NotificationPanel from './common/NotificationPanel';
 
 
 // Helper function for health status colors
@@ -55,6 +56,15 @@ const PGMDashboard = ({ username, onLogout }) => {
 
   const [returnNote, setReturnNote] = useState('');
 
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const prevNotificationsCount = useRef(0);
+
+  const showToast = useCallback((msg, type = 'success') => {
+    setToastMessage({ msg, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  }, []);
+
   // --- BULK IMPORT STATES ---
   const [showImportModal, setShowImportModal] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
@@ -67,9 +77,34 @@ const PGMDashboard = ({ username, onLogout }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [expandedResource, setExpandedResource] = useState(null);
-  const showToast = (msg, type = 'success') => {
-    setToastMessage({ msg, type });
-    setTimeout(() => setToastMessage(null), 4000);
+  const fetchNotifications = useCallback(async () => {
+    try {
+        const res = await fetch(`http://127.0.0.1:8000/api/get-notifications/?username=${username}`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data.length > prevNotificationsCount.current) {
+                const newCount = data.length - prevNotificationsCount.current;
+                for (let i = 0; i < newCount; i++) {
+                    if (data[i]) {
+                        showToast(`🔔 Notification: ${data[i].message}`, 'success');
+                    }
+                }
+            }
+            setNotifications(data);
+            prevNotificationsCount.current = data.length;
+        }
+    } catch (err) { console.error("Notification fetch error:", err); }
+  }, [username, showToast]);
+
+  const markRead = async () => {
+      try {
+          await fetch('http://127.0.0.1:8000/api/mark-notifications-read/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username })
+          });
+          setNotifications([]);
+      } catch (err) { console.error("Mark read error:", err); }
   };
 
   // --- 1. Fetch Data ---
@@ -154,17 +189,19 @@ const PGMDashboard = ({ username, onLogout }) => {
     fetchData();
     fetchUserProfile();
     fetchResources();
+    fetchNotifications();
     const interval = setInterval(() => {
       fetchData();
       fetchResources();
+      fetchNotifications();
     }, 5000); // Auto refresh every 5 seconds
-    const handleFocus = () => { fetchData(); fetchUserProfile(); fetchResources(); };
+    const handleFocus = () => { fetchData(); fetchUserProfile(); fetchResources(); fetchNotifications(); };
     window.addEventListener('focus', handleFocus);
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [fetchData, fetchUserProfile, fetchResources]);
+  }, [fetchData, fetchUserProfile, fetchResources, fetchNotifications]);
 
 
   // --- 2. Action Handlers (Original Functions Preserved) ---
@@ -459,9 +496,17 @@ const PGMDashboard = ({ username, onLogout }) => {
              activeTab === 'resource_analytics' ? 'Resource Analytics & Performance' :
              'Working Programs Control'}
           </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer' }} onClick={() => setShowProfileModal(true)}>
-            <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
-            <div style={{ width: '35px', height: '35px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', background: 'linear-gradient(135deg, #1e40af, #3b82f6)', color: '#fff', fontWeight: 'bold' }}>{username?.charAt(0).toUpperCase() || 'U'}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <NotificationPanel
+              notifications={notifications}
+              showNotifications={showNotifications}
+              setShowNotifications={setShowNotifications}
+              markRead={markRead}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer' }} onClick={() => setShowProfileModal(true)}>
+              <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
+              <div style={{ width: '35px', height: '35px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', background: 'linear-gradient(135deg, #1e40af, #3b82f6)', color: '#fff', fontWeight: 'bold' }}>{username?.charAt(0).toUpperCase() || 'U'}</div>
+            </div>
           </div>
         </div>
 

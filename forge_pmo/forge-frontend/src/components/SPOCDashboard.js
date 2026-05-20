@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, LineChart, Line, CartesianGrid, BarChart, Bar, Legend } from 'recharts';
 import ProgramTrackerModal from './common/ProgramTrackerModal';
+import NotificationPanel from './common/NotificationPanel';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
@@ -24,6 +25,15 @@ const SPOCDashboard = ({ username, onLogout }) => {
   const [toastMessage, setToastMessage] = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileData, setProfileData] = useState({ username: username, email: '', role: 'Business SPOC', bio: '', phone: '' });
+  
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const prevNotificationsCount = useRef(0);
+
+  const showToast = useCallback((msg, type = 'success') => {
+    setToastMessage({ msg, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  }, []);
 
   // --- NEW RESOURCE ANALYTICS STATES ---
   const [resources, setResources] = useState([]);
@@ -31,9 +41,34 @@ const SPOCDashboard = ({ username, onLogout }) => {
   const [roleFilter, setRoleFilter] = useState('All');
   const [expandedResource, setExpandedResource] = useState(null);
 
-  const showToast = (msg, type = 'success') => {
-    setToastMessage({ msg, type });
-    setTimeout(() => setToastMessage(null), 4000);
+  const fetchNotifications = useCallback(async () => {
+    try {
+        const res = await fetch(`http://127.0.0.1:8000/api/get-notifications/?username=${username}`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data.length > prevNotificationsCount.current) {
+                const newCount = data.length - prevNotificationsCount.current;
+                for (let i = 0; i < newCount; i++) {
+                    if (data[i]) {
+                        showToast(`🔔 Notification: ${data[i].message}`, 'success');
+                    }
+                }
+            }
+            setNotifications(data);
+            prevNotificationsCount.current = data.length;
+        }
+    } catch (err) { console.error("Notification fetch error:", err); }
+  }, [username, showToast]);
+
+  const markRead = async () => {
+      try {
+          await fetch('http://127.0.0.1:8000/api/mark-notifications-read/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username })
+          });
+          setNotifications([]);
+      } catch (err) { console.error("Mark read error:", err); }
   };
 
   const fetchResources = useCallback(async () => {
@@ -85,17 +120,19 @@ const SPOCDashboard = ({ username, onLogout }) => {
     fetchData();
     fetchUserProfile();
     fetchResources();
+    fetchNotifications();
     const interval = setInterval(() => {
         fetchData(true);
         fetchResources();
+        fetchNotifications();
     }, 5000);
-    const handleFocus = () => { fetchData(true); fetchUserProfile(); fetchResources(); };
+    const handleFocus = () => { fetchData(true); fetchUserProfile(); fetchResources(); fetchNotifications(); };
     window.addEventListener('focus', handleFocus);
     return () => {
         clearInterval(interval);
         window.removeEventListener('focus', handleFocus);
     };
-  }, [fetchData, fetchUserProfile, fetchResources]);
+  }, [fetchData, fetchUserProfile, fetchResources, fetchNotifications]);
 
 
   const handleAction = async (programId, newStatus) => {
@@ -264,9 +301,17 @@ const SPOCDashboard = ({ username, onLogout }) => {
         {/* HEADER */}
         <div style={topHeaderStyle}>
           <span style={{ fontWeight: 700, color: '#1B3A6B' }}>Business SPOC Dashboard</span>
-          <div style={{display:'flex', alignItems:'center', gap:'15px', cursor: 'pointer'}} onClick={() => setShowProfileModal(true)}>
-            <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
-            <div style={{ width: '35px', height: '35px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', fontWeight: 'bold' }}>{username?.charAt(0).toUpperCase() || 'U'}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <NotificationPanel
+              notifications={notifications}
+              showNotifications={showNotifications}
+              setShowNotifications={setShowNotifications}
+              markRead={markRead}
+            />
+            <div style={{display:'flex', alignItems:'center', gap:'15px', cursor: 'pointer'}} onClick={() => setShowProfileModal(true)}>
+              <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
+              <div style={{ width: '35px', height: '35px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', fontWeight: 'bold' }}>{username?.charAt(0).toUpperCase() || 'U'}</div>
+            </div>
           </div>
         </div>
 
