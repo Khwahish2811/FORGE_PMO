@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } from 'recharts';
-import { Gantt, ViewMode } from 'gantt-task-react';
-import "gantt-task-react/dist/index.css";
+import FocusMode from './common/FocusMode';
+import KanbanBoard from './common/KanbanBoard';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
@@ -452,80 +452,20 @@ const TMDashboard = ({ user, onLogout }) => {
       )}
 
       {/* FOCUS MODE PRO OVERLAY */}
-      {isFocusMode && focusTask && (
-        <div style={focusOverlay}>
-            <div style={focusCardPro}>
-               {focusPhase === 'setup' && (
-                   <>
-                       <h2 style={{margin: '0 0 10px 0', color: '#1B3A6B'}}> Focus Session</h2>
-                       <p style={{fontSize: '14px', color: '#64748b', marginBottom: '25px'}}>Select your focus duration for:<br/><b>{focusTask.task_title}</b></p>
-                       <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px'}}>
-                           <button onClick={() => startSession(15)} style={btnDuration}> Quick Fix <br/> <span style={{fontSize: '12px', fontWeight: 'normal'}}>15 min</span></button>
-                           <button onClick={() => startSession(25)} style={{...btnDuration, background: '#EFF6FF', borderColor: '#3B82F6'}}> Deep Work <br/> <span style={{fontSize: '12px', fontWeight: 'normal'}}>25 min</span></button>
-                           <button onClick={() => startSession(45)} style={btnDuration}> Hyper Focus <br/> <span style={{fontSize: '12px', fontWeight: 'normal'}}>45 min</span></button>
-                           <button onClick={() => startSession(60)} style={btnDuration}> Flow State <br/> <span style={{fontSize: '12px', fontWeight: 'normal'}}>60 min</span></button>
-                       </div>
-                       <button onClick={() => setIsFocusMode(false)} style={btnFocusCancelSetup}>Cancel</button>
-                   </>
-               )}
-
-               {(focusPhase === 'active' || focusPhase === 'break') && (
-                   <>
-                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
-                           <span style={{background: focusPhase === 'break' ? '#ECFDF5' : '#EFF6FF', color: focusPhase === 'break' ? '#10B981' : '#3B82F6', padding: '5px 12px', borderRadius: '15px', fontSize: '12px', fontWeight: 'bold'}}>
-                               {focusPhase === 'break' ? ' Break Time' : ' Focusing'}
-                           </span>
-                           {focusPhase === 'active' && <span style={{fontSize: '12px', color: '#64748B'}}>Priority: <b>{focusTask.priority}</b></span>}
-                       </div>
-
-                       {focusPhase === 'active' && <h3 style={{fontSize: '16px', margin: '0 0 20px 0', color: '#0F172A'}}>{focusTask.task_title}</h3>}
-
-                       <div style={{position: 'relative', width: '220px', height: '220px', margin: '0 auto'}}>
-                           <svg height="220" width="220" style={{transform: 'rotate(-90deg)'}}>
-                              <circle stroke="#F1F5F9" fill="transparent" strokeWidth={stroke} r={normalizedRadius} cx={radius+10} cy={radius+10} />
-                              <circle
-                                 stroke={focusPhase === 'break' ? '#10B981' : '#3B82F6'}
-                                 fill="transparent"
-                                 strokeWidth={stroke}
-                                 strokeDasharray={circumference + ' ' + circumference}
-                                 style={{strokeDashoffset, transition: 'stroke-dashoffset 1s linear'}}
-                                 strokeLinecap="round"
-                                 r={normalizedRadius} cx={radius+10} cy={radius+10}
-                              />
-                           </svg>
-                           <div style={{position: 'absolute', top: '0', left: '0', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column'}}>
-                               <span style={{fontSize: '48px', fontWeight: '800', color: '#0F172A', fontFamily: 'monospace', letterSpacing: '-2px'}}>{formatTime(timerLeft)}</span>
-                           </div>
-                       </div>
-
-                       <div style={{display: 'flex', gap: '15px', marginTop: '30px'}}>
-                          <button onClick={toggleTimer} style={btnFocusPrimary}>
-                             {isTimerRunning ? ' Pause' : ' Resume'}
-                          </button>
-                          {focusPhase === 'active' && (
-                              <button onClick={logPartialTimeAndClose} style={btnFocusSecondary}>Stop & Log Time</button>
-                          )}
-                          {focusPhase === 'break' && (
-                              <button onClick={() => setIsFocusMode(false)} style={btnFocusSecondary}>Skip Break</button>
-                          )}
-                       </div>
-                   </>
-               )}
-
-               {focusPhase === 'completed' && (
-                   <div style={{textAlign: 'center'}}>
-                       <div style={{fontSize: '60px', margin: '0 0 10px 0'}}></div>
-                       <h2 style={{color: '#10B981', margin: '0 0 10px 0'}}>Session Complete!</h2>
-                       <p style={{color: '#64748B', fontSize: '14px', marginBottom: '30px'}}>Great job! You stayed focused for {Math.round(totalTime/60)} minutes.</p>
-                       <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
-                           <button onClick={logPartialTimeAndClose} style={{...btnFocusPrimary, width: '100%'}}> Log Time & Close</button>
-                           <button onClick={() => { logPartialTimeAndClose(); startBreak(); setIsFocusMode(true); }} style={{...btnFocusSecondary, width: '100%', background: '#ECFDF5', color: '#10B981', border: '1px solid #A7F3D0'}}> Take a 5 min Break</button>
-                       </div>
-                   </div>
-               )}
-            </div>
-        </div>
-      )}
+      <FocusMode
+        isOpen={isFocusMode}
+        focusTask={focusTask}
+        focusPhase={focusPhase}
+        timerLeft={timerLeft}
+        isTimerRunning={isTimerRunning}
+        totalTime={totalTime}
+        startSession={startSession}
+        toggleTimer={toggleTimer}
+        logPartialTimeAndClose={logPartialTimeAndClose}
+        startBreak={startBreak}
+        setIsFocusMode={setIsFocusMode}
+        setFocusPhase={setFocusPhase}
+      />
 
       {/* SIDEBAR */}
       <div style={sidebarStyle}>
@@ -893,99 +833,11 @@ const TMDashboard = ({ user, onLogout }) => {
         </div>
 
         {/* INTERACTIVE KANBAN */}
-        <div style={{ padding: '0 25px 25px 25px' }}>
-          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
-             <h3 style={sectionTitlePremium}> Sprint Execution</h3>
-          </div>
-
-          {Object.keys(tasksBySprint).sort().map(sprintName => {
-            const firstTask = tasksBySprint[sprintName][0];
-            const sprintStatus = firstTask?.sprint_status || 'Planned';
-
-            return (
-              <div key={sprintName} style={{marginBottom: '40px'}}>
-                <div style={sprintHeader}>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-                     <span style={{fontSize: '16px', fontWeight: 'bold', color: '#1B3A6B'}}>{sprintName}</span>
-                     <span style={sprintBadge(sprintStatus)}>{sprintStatus}</span>
-                  </div>
-                </div>
-
-              <div style={kanbanGrid}>
-                {['To Do', 'In Progress', 'Done'].map(col => (
-                  <div key={col} style={columnStyle}>
-                    <div style={colTitleGroup}>
-                        <span style={colTitle}>{col}</span>
-                        <span style={colCount}>{tasksBySprint[sprintName].filter(t => t.status === col).length}</span>
-                    </div>
-                    <div style={cardListStyle}>
-                    {tasksBySprint[sprintName].filter(t => t.status === col).map(task => (
-                      <div key={task.id} style={cardStylePremium}>
-                        <div style={{display:'flex', justifyContent:'space-between', marginBottom: '8px', alignItems: 'center'}}>
-                           <span style={tagStyle(task.priority)}>{task.priority}</span>
-                           <small style={{color: '#94a3b8', fontSize: '10px'}}>#{task.id}</small>
-                        </div>
-                        <strong style={cardTitleStyleMain}>{task.task_title}</strong>
-                        
-                        {/* Premium Hierarchy Context block */}
-                        <div style={{
-                          marginTop: '12px',
-                          padding: '12px',
-                          background: '#f8fafc',
-                          borderRadius: '10px',
-                          border: '1px solid #e2e8f0',
-                          fontSize: '11px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '8px'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>Program:</span>
-                            <span style={{ color: '#1B3A6B', fontWeight: 'bold', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.program_name}>{task.program_name}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>Project:</span>
-                            <span style={{ color: '#334155', fontWeight: '700', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={task.project_name}>{task.project_name}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>PM:</span>
-                            <span style={{ color: '#2563EB', fontWeight: 'bold' }}>{task.project_manager}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '4px' }}>
-                            <span style={{ color: '#64748B', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>Sprint End:</span>
-                            <span style={{ color: '#ef4444', fontWeight: 'bold' }}>{task.sprint_deadline}</span>
-                          </div>
-                        </div>
-
-                        <div style={{fontSize: '11px', color: '#64748B', marginTop: '12px', display: 'flex', justifyContent: 'space-between'}}>
-                           <span>Task Due: {formatDate(task.due_date)}</span>
-                           <span>{task.hours_logged || 0}h logged</span>
-                        </div>
-
-                        <div style={cardActions}>
-                            {task.status === 'To Do' && (
-                                <button onClick={() => updateStatus(task.id, 'In Progress')} style={moveBtnPrimary}>Start Work</button>
-                            )}
-                            {task.status === 'In Progress' && (
-                                <>
-                                  <button onClick={() => startFocusForTask(task)} style={btnFocusSmall}> Focus</button>
-                                  <button onClick={() => updateStatus(task.id, 'Done')} style={finishBtn}>Mark Done</button>
-                                </>
-                            )}
-                            {task.status === 'Done' && (
-                                <button onClick={() => updateStatus(task.id, 'In Progress')} style={moveBtnSecondary}>Re-open</button>
-                            )}
-                        </div>
-                      </div>
-                    ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-        </div>
+        <KanbanBoard
+          tasksBySprint={tasksBySprint}
+          updateStatus={updateStatus}
+          startFocusForTask={startFocusForTask}
+        />
 
         {/* MODERN EFFORT LOG WIDGET */}
         <div style={{ padding: '0 25px 50px 25px' }}>

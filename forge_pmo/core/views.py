@@ -239,49 +239,11 @@ def get_team_members(request):
 # --- 4. PROJECT PLAN CREATION ---
 @api_view(['POST'])
 def create_project_plan(request):
-    data = request.data
     try:
-        # pyrefly: ignore [bad-context-manager]
-        with transaction.atomic():
-            # pyrefly: ignore [missing-attribute]
-            program = Program.objects.get(id=data.get('program_id'))
-            pm_user = User.objects.get(username=data.get('pm_username'))
-
-            # pyrefly: ignore [missing-attribute]
-            project = Project.objects.create(
-                program=program,
-                name=data.get('name'),
-                description=data.get('description', ''),
-                start_date=data.get('start_date'),
-                end_date=data.get('end_date'),
-                priority=data.get('priority', 'Medium'),
-                created_by=pm_user,
-                status='Pending'
-            )
-
-            sprints_data = data.get('sprints', [])
-            for idx, s_data in enumerate(sprints_data, start=1):
-                # pyrefly: ignore [missing-attribute]
-                Sprint.objects.create(
-                    project=project,
-                    name=s_data.get('name', f"Sprint {idx}"),
-                    start_date=s_data['start_date'],
-                    end_date=s_data['end_date'],
-                    status='Planned'
-                )
-
-            team_data = data.get('team', [])
-            for member in team_data:
-                user_obj = User.objects.get(id=member.get('userId'))
-                # pyrefly: ignore [missing-attribute]
-                TeamMember.objects.create(
-                    project=project,
-                    user=user_obj,
-                    role=member.get('role'),
-                    fte_score=float(member.get('fte') or 1.0)
-                )
-
-            return Response({"success": True, "project_id": project.id}, status=201)
+        from core.services import ProjectService
+        pm_username = request.data.get('pm_username')
+        project = ProjectService.create_project_plan(pm_username, request.data)
+        return Response({"success": True, "project_id": project.id}, status=201)
     except Exception as e:
         logger.error(f"CREATE PLAN ERROR: {str(e)}")
         return Response({"error": str(e)}, status=500)
@@ -633,102 +595,23 @@ def get_manager_team_tasks(request):
 @api_view(['GET'])
 def get_dashboard_stats(request):
     username = request.query_params.get('username')
-    project_name = request.query_params.get('project_id')  # Frontend se project name aa raha hai
-    today = timezone.now().date()
-
-    # Initial Response structure
-    stats_data = {
-        "total_programs": 0,
-        "pending_approvals": 0,
-        "active_tasks": 0,
-        "due_this_week": 0,
-        "hours_today": 0,
-        "fte_score": 0,
-        "daily_limit": 9
-    }
-
+    project_name = request.query_params.get('project_id')
     try:
-        # --- GLOBAL STATS (Using your Program model) ---
-        # pyrefly: ignore [missing-attribute]
-        stats_data["total_programs"] = Program.objects.all().count()
-        # pyrefly: ignore [missing-attribute]
-        stats_data["pending_approvals"] = Program.objects.filter(status__iexact='Pending').count()
-
-        if username:
-
-            # pyrefly: ignore [missing-attribute]
-            stats_data["active_tasks"] = Task.objects.filter(
-                assigned_to__username=username
-            ).exclude(status__iexact='Done').count()
-
-            # 2. Due This Week
-            week_end = today + timedelta(days=7)
-            # pyrefly: ignore [missing-attribute]
-            stats_data["due_this_week"] = Task.objects.filter(
-                assigned_to__username=username,
-                due_date__range=[today, week_end]
-            ).exclude(status__iexact='Done').count()
-
-            # --- HOURS LOGIC (DailyEffortLog table) ---
-            # pyrefly: ignore [missing-attribute]
-            base_effort_query = DailyEffortLog.objects.filter(user__username=username)
-            effort_query = base_effort_query
-
-
-            if project_name:
-                effort_query = effort_query.filter(task__project__name=project_name)
-                try:
-                    project_obj = Project.objects.filter(name=project_name).order_by('-id').first()
-                    if project_obj:
-                        stats_data["latest_update_note"] = project_obj.latest_update_note or ""
-                        
-                        # Calculate Project Total FTE and User's Project FTE
-                        project_team = TeamMember.objects.filter(project=project_obj)
-                        stats_data["project_total_fte"] = round(float(project_team.aggregate(Sum('fte_score'))['fte_score__sum'] or 0.0), 2)
-                        
-                        user_tm = project_team.filter(user__username=username).first()
-                        stats_data["user_project_fte"] = round(float(user_tm.fte_score if user_tm else 0.0), 2)
-                    else:
-                        stats_data["latest_update_note"] = ""
-                        stats_data["project_total_fte"] = 0.0
-                        stats_data["user_project_fte"] = 0.0
-
-                except Exception as e:
-                    stats_data["latest_update_note"] = ""
-                    stats_data["project_total_fte"] = 0.0
-                    stats_data["user_project_fte"] = 0.0
-                    logger.error(f"Error fetching project specific stats: {e}")
-
-
-            # Today's hours
-            hours_today = effort_query.filter(log_date=today).aggregate(Sum('hours_added'))['hours_added__sum'] or 0
-            # pyrefly: ignore [bad-typed-dict-key]
-            stats_data["hours_today"] = round(float(hours_today), 1)
-
-            # Monthly hours for FTE (160 standard base) - ALWAYS USE UNFILTERED BASE QUERY!
-            total_month_hours = base_effort_query.filter(
-                log_date__month=today.month,
-                log_date__year=today.year
-            ).aggregate(Sum('hours_added'))['hours_added__sum'] or 0
-
-            # pyrefly: ignore [bad-typed-dict-key]
-            stats_data["fte_score"] = round(float(total_month_hours) / 160, 2)
-
-            # --- ASSIGNED FTE LOGIC (TeamMember table) ---
-            # Sum of FTE scores across all active projects
-            # pyrefly: ignore [missing-attribute]
-            assigned_fte = TeamMember.objects.filter(
-                user__username=username,
-                project__status__in=['Approved', 'Active', 'In Progress']
-            ).aggregate(Sum('fte_score'))['fte_score__sum'] or 0.0
-            
-            stats_data["assigned_fte"] = round(float(assigned_fte), 2)
-
+        from core.services import StatsService
+        stats_data = StatsService.get_dashboard_stats(username, project_name)
         return Response(stats_data, status=200)
-
     except Exception as e:
         logger.error(f"DEBUG ERROR in get_dashboard_stats: {str(e)}")
-        return Response(stats_data, status=200)
+        fallback = {
+            "total_programs": 0,
+            "pending_approvals": 0,
+            "active_tasks": 0,
+            "due_this_week": 0,
+            "hours_today": 0,
+            "fte_score": 0,
+            "daily_limit": 9
+        }
+        return Response(fallback, status=200)
 
 # --- FIXED PGM DASHBOARD STATS WITH GANTT & VELOCITY ---
 @api_view(['GET'])
@@ -736,128 +619,10 @@ def get_program_tracker_stats(request):
     program_id = request.query_params.get('program_id')
     if not program_id:
         return Response({"error": "Program ID is required"}, status=400)
-
     try:
-        program = get_object_or_404(Program, id=program_id)
-        # pyrefly: ignore [missing-attribute]
-        projects = Project.objects.filter(program=program)
-        project_ids = list(projects.values_list('id', flat=True))
-        # pyrefly: ignore [missing-attribute]
-        all_tasks = Task.objects.filter(project_id__in=project_ids).select_related('assigned_to', 'sprint')
-
-        # 1. Overall Progress
-        total_tasks = all_tasks.count()
-        done_tasks = all_tasks.filter(status__icontains='Done').count()
-        progress_val = round((done_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
-
-        # 2. Activity Logs
-        recent_logs = []
-        for task in all_tasks.order_by('-id')[:5]:
-            recent_logs.append({
-                "user": task.assigned_to.username if task.assigned_to else "Unassigned",
-                "task_name": task.title or "Unnamed",
-                "status": task.status or "In Progress",
-                "due_date": task.due_date.strftime('%d %b') if task.due_date else "No Date"
-            })
-
-        # 3. Task Distribution (Pie Chart)
-        task_dist = [
-            {"name": "Done", "value": done_tasks},
-            {"name": "Doing", "value": all_tasks.filter(status__icontains='Progress').count()},
-            {"name": "Todo", "value": all_tasks.filter(status__icontains='To Do').count()},
-        ]
-
-        # 4. Gantt Data (FIXED: Populating with Task Timelines)
-        gantt_data = []
-        for task in all_tasks:
-            # Gantt requires a start and end. If no date exists, we use program start/end as fallback
-            start_date = task.project.start_date if task.project.start_date else timezone.now().date()
-            end_date = task.due_date if task.due_date else (start_date + timedelta(days=7))
-
-            gantt_data.append({
-                "id": task.id,
-                "name": task.title,
-                "start": start_date.strftime('%Y-%m-%d'),
-                "end": end_date.strftime('%Y-%m-%d'),
-                "progress": 100 if "Done" in task.status else 0,
-                "dependencies": []
-            })
-
-        # 5. Velocity Data (Bar Chart)
-        velocity_data = []
-        # pyrefly: ignore [missing-attribute]
-        sprints = Sprint.objects.filter(project_id__in=project_ids)
-        for s in sprints:
-            s_tasks = all_tasks.filter(sprint=s)
-            s_total = s_tasks.count()
-            s_done = s_tasks.filter(status__icontains='Done').count()
-            comp_rate = round((s_done / s_total * 100), 1) if s_total > 0 else 0
-            velocity_data.append({
-                "name": s.name,
-                "completion": comp_rate
-            })
-
-        # 6. Projects Breakdown (Real-time detailed breakdown)
-        projects_breakdown = []
-        for p in projects:
-            p_tasks = all_tasks.filter(project=p)
-            p_total = p_tasks.count()
-            p_done = p_tasks.filter(status__icontains='Done').count()
-            p_progress = round((p_done / p_total * 100), 1) if p_total > 0 else 0
-
-            # Last team member and task name
-            last_log = DailyEffortLog.objects.filter(task__project=p).order_by('-id').first()
-            last_member = "None"
-            last_task = "No active task yet"
-
-            if last_log:
-                last_member = last_log.user.username
-                last_task = last_log.task.title
-            else:
-                last_t = p_tasks.order_by('-id').first()
-                if last_t:
-                    last_member = last_t.assigned_to.username if last_t.assigned_to else "Unassigned"
-                    last_task = last_t.title
-
-            # Active sprint due date
-            active_s = Sprint.objects.filter(project=p, status='In Progress').first()
-            if not active_s:
-                active_s = Sprint.objects.filter(project=p).order_by('-end_date').first()
-
-            sprint_name = active_s.name if active_s else "No Active Sprint"
-            sprint_due = str(active_s.end_date) if active_s and active_s.end_date else "N/A"
-
-            # Total hours logged on this project
-            total_hours = p_tasks.aggregate(total=Sum('hours_logged'))['total'] or 0.0
-
-            projects_breakdown.append({
-                "id": p.id,
-                "name": p.name,
-                "status": p.status,
-                "progress": p_progress,
-                "total_tasks": p_total,
-                "completed_tasks": p_done,
-                "last_active_member": last_member,
-                "last_active_task": last_task,
-                "sprint_name": sprint_name,
-                "sprint_due_date": sprint_due,
-                "total_hours": round(float(total_hours), 1)
-            })
-
-        return Response({
-            "program_name": program.name,
-            "pm_name": getattr(program.project_manager_assigned, 'username', "Not Assigned"),
-            "overall_progress": progress_val,
-            "total_tasks": total_tasks,
-            "completed_tasks": done_tasks,
-            "team_count": all_tasks.exclude(assigned_to__isnull=True).values('assigned_to').distinct().count(),
-            "task_distribution": task_dist,
-            "recent_logs": recent_logs,
-            "gantt_data": gantt_data,
-            "velocity_data": velocity_data,
-            "projects_breakdown": projects_breakdown
-        }, status=200)
-
+        from core.services import StatsService
+        stats_data = StatsService.get_program_tracker_stats(program_id)
+        return Response(stats_data, status=200)
     except Exception as e:
         logger.error(f"TRACKER STATS ERROR: {str(e)}")
         return Response({"error": str(e)}, status=500)
@@ -1156,209 +921,22 @@ def get_team_performance(request):
     manager_username = request.query_params.get('username')
     if not manager_username:
         return Response({"error": "Manager username required"}, status=400)
-    
     try:
-        # Get all projects managed by this PM
-        # pyrefly: ignore [missing-attribute]
-        projects = Project.objects.filter(created_by__username=manager_username)
-        project_ids = projects.values_list('id', flat=True)
-        
-        # Get all team members assigned to these projects
-        # pyrefly: ignore [missing-attribute]
-        team_assignments = TeamMember.objects.filter(project_id__in=project_ids).select_related('user', 'project')
-        
-        member_stats = {}
-        
-        for assign in team_assignments:
-            u = assign.user
-            if u.username not in member_stats:
-                member_stats[u.username] = {
-                    "username": u.username,
-                    "full_name": f"{u.first_name} {u.last_name}" if u.first_name else u.username,
-                    "total_projects": 0,
-                    "total_fte": 0.0,
-                    "total_tasks": 0,
-                    "completed_tasks": 0,
-                    "recent_tasks": []
-                }
-            
-            stats = member_stats[u.username]
-            stats["total_projects"] += 1
-            stats["total_fte"] += assign.fte_score
-            
-            # Get tasks for this user in projects managed by this PM
-            # pyrefly: ignore [missing-attribute]
-            tasks = Task.objects.filter(assigned_to=u, project_id__in=project_ids)
-            stats["total_tasks"] += tasks.count()
-            stats["completed_tasks"] += tasks.filter(status__iexact='Done').count()
-            
-            # Get 3 most recent tasks
-            recent = tasks.order_by('-due_date')[:3]
-            for t in recent:
-                stats["recent_tasks"].append({
-                    "title": t.title,
-                    "project": t.project.name,
-                    "status": t.status,
-                    "due_date": str(t.due_date)
-                })
-
-        # Calculate final metrics
-        performance_data = []
-        for username, data in member_stats.items():
-            completion_rate = (data["completed_tasks"] / data["total_tasks"] * 100) if data["total_tasks"] > 0 else 0
-            # Simple score logic: weighted average of completion rate and fte (normalized)
-            # A good member has high completion rate and balanced FTE usage
-            score = (completion_rate * 0.7) + (min(data["total_fte"], 2.0) * 15) # Cap FTE bonus at 30 points
-            
-            performance_data.append({
-                **data,
-                "completion_rate": round(completion_rate, 1),
-                "performance_score": round(score, 1)
-            })
-            
-        # Sort by performance score
-        performance_data.sort(key=lambda x: x["performance_score"], reverse=True)
-        
+        from core.services import TeamService
+        performance_data = TeamService.get_team_performance(manager_username)
         return Response(performance_data)
-        
     except Exception as e:
+        logger.error(f"TEAM PERFORMANCE ERROR: {str(e)}")
         return Response({"error": str(e)}, status=500)
 
 @api_view(['GET'])
 def get_all_resources(request):
     try:
-        from django.contrib.auth.models import User
-        from core.models import Profile, TeamMember, Task, Project, DailyEffortLog
-        from django.db.models import Sum
-        import datetime
-        
-        # Get all profiles filtered by allowed users
-        profiles = Profile.objects.select_related('user').filter(user__username__in=['khwahish_pm', 'shailja_pgm', 'yash_tm', 'priya_tm'])
-        
-        resources_list = []
-        today = datetime.date.today()
-        
-        for profile in profiles:
-            u = profile.user
-            role = profile.role
-            role_display = dict(Profile.ROLES).get(role, role)
-            
-            # 1. Projects managed or assigned
-            active_projects = []
-            if role == 'PGM':
-                # pyrefly: ignore [missing-attribute]
-                projs = Project.objects.filter(program__project_manager_assigned=u, status__in=['Approved', 'Active', 'In Progress'])
-                active_projects = list(projs.values_list('name', flat=True))
-            elif role == 'PM':
-                # pyrefly: ignore [missing-attribute]
-                projs = Project.objects.filter(created_by=u, status__in=['Approved', 'Active', 'In Progress'])
-                active_projects = list(projs.values_list('name', flat=True))
-            else: # TM
-                # pyrefly: ignore [missing-attribute]
-                tms = TeamMember.objects.filter(user=u, project__status__in=['Approved', 'Active', 'In Progress']).select_related('project')
-                active_projects = [tm.project.name for tm in tms]
-            
-            # 2. Total Assigned FTE
-            extra_metrics = {}
-            if role == 'PGM':
-                # pyrefly: ignore [missing-attribute]
-                projects_handled = Project.objects.filter(program__project_manager_assigned=u, status__in=['Approved', 'Active', 'In Progress']).count()
-                # pyrefly: ignore [missing-attribute]
-                employees_managed = TeamMember.objects.filter(
-                    project__program__project_manager_assigned=u,
-                    project__status__in=['Approved', 'Active', 'In Progress']
-                ).values('user').distinct().count()
-                pending_sprints = Sprint.objects.filter(status='Pending Approval').count()
-                meetings_and_approvals = (projects_handled * 3) + pending_sprints
-                
-                assigned_fte = (projects_handled * 0.25) + (employees_managed * 0.05) + (meetings_and_approvals * 0.03)
-                extra_metrics = {
-                    "projects_handled": projects_handled,
-                    "employees_managed": employees_managed,
-                    "meetings_and_approvals": meetings_and_approvals
-                }
-            elif role == 'PM':
-                # pyrefly: ignore [missing-attribute]
-                active_tasks = Task.objects.filter(project__created_by=u, status__in=['In Progress', 'To Do']).count()
-                # pyrefly: ignore [missing-attribute]
-                team_coordination = TeamMember.objects.filter(project__created_by=u).values('user').distinct().count()
-                # pyrefly: ignore [missing-attribute]
-                active_sprints = Sprint.objects.filter(project__created_by=u, status='In Progress').count()
-                # pyrefly: ignore [missing-attribute]
-                overdue_tasks = Task.objects.filter(project__created_by=u, due_date__lt=today).exclude(status='Done').count()
-                reporting_deadline_management = (active_sprints * 2) + overdue_tasks
-                
-                assigned_fte = (active_tasks * 0.05) + (team_coordination * 0.08) + (reporting_deadline_management * 0.10)
-                extra_metrics = {
-                    "active_tasks": active_tasks,
-                    "team_coordination": team_coordination,
-                    "reporting_deadline_management": reporting_deadline_management
-                }
-            else: # TM
-                # pyrefly: ignore [missing-attribute]
-                assigned_fte = TeamMember.objects.filter(
-                    user=u,
-                    project__status__in=['Approved', 'Active', 'In Progress']
-                ).aggregate(total=Sum('fte_score'))['total'] or 0.0
-
-            assigned_fte = round(float(assigned_fte), 2)
-            
-            # 3. Total Calculated FTE (Month hours / 160)
-            # pyrefly: ignore [missing-attribute]
-            month_hours = DailyEffortLog.objects.filter(
-                user=u,
-                log_date__month=today.month,
-                log_date__year=today.year
-            ).aggregate(total=Sum('hours_added'))['total'] or 0.0
-            calculated_fte = round(float(month_hours) / 160, 2)
-            
-            # 4. Tasks and Completion status
-            # pyrefly: ignore [missing-attribute]
-            tasks = Task.objects.filter(assigned_to=u)
-            total_tasks = tasks.count()
-            completed_tasks = tasks.filter(status='Done').count()
-            completion_rate = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0.0
-            
-            # 5. Workload status mapping
-            if assigned_fte > 1.0:
-                workload_status = 'Overloaded'
-                workload_color = 'Red'
-                status = 'Overutilized'
-            elif assigned_fte >= 0.5:
-                workload_status = 'Busy'
-                workload_color = 'Yellow'
-                status = 'Optimal'
-            else:
-                workload_status = 'Free'
-                workload_color = 'Green'
-                status = 'Underutilized' if assigned_fte > 0.0 else 'Available'
-                
-            # 6. Performance Score
-            score = (completion_rate * 0.7) + (min(float(assigned_fte), 2.0) * 15)
-            performance_score = round(score, 1)
-            
-            resources_list.append({
-                "username": u.username,
-                "email": u.email,
-                "role": role,
-                "role_display": role_display,
-                "active_projects": active_projects,
-                "assigned_fte": assigned_fte,
-                "calculated_fte": calculated_fte,
-                "total_tasks": total_tasks,
-                "completed_tasks": completed_tasks,
-                "completion_rate": completion_rate,
-                "utilization_status": status,
-                "workload_status": workload_status,
-                "workload_color": workload_color,
-                "extra_metrics": extra_metrics,
-                "performance_score": performance_score,
-                "phone": profile.phone or '',
-                "bio": profile.bio or ''
-            })
-            
+        from core.services import TeamService
+        resources_list = TeamService.get_all_resources()
         return Response(resources_list)
     except Exception as e:
+        logger.error(f"GET ALL RESOURCES ERROR: {str(e)}")
         return Response({"error": str(e)}, status=500)
 
 # --- NEW ONGOING PROJECT FLOW APIS ---
@@ -1502,142 +1080,14 @@ from datetime import datetime, date
 @api_view(['POST'])
 def parse_program_import(request):
     try:
+        from core.services import ProgramService
         uploaded_file = request.FILES.get('file')
-        if not uploaded_file:
-            return Response({"success": False, "error": "No file uploaded"}, status=400)
-        
-        file_name = uploaded_file.name.lower()
-        if file_name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
-        elif file_name.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(uploaded_file)
-        else:
-            return Response({"success": False, "error": "Unsupported file format. Please upload CSV or Excel (.xlsx/.xls) file."}, status=400)
-        
-        # Standardize column names to lower case and strip whitespace
-        df.columns = [str(c).strip().lower().replace(' ', '_') for c in df.columns]
-        
-        # Column mappings (to support flexible formats)
-        col_mappings = {
-            'name': ['program_name', 'name', 'title', 'program'],
-            'description': ['description', 'desc', 'details', 'about'],
-            'start_date': ['start_date', 'start', 'startdate'],
-            'end_date': ['end_date', 'end', 'enddate']
-        }
-        
-        # Helper to find column matching any alias
-        def find_col(aliases):
-            for alias in aliases:
-                if alias in df.columns:
-                    return alias
-            return None
-        
-        name_col = find_col(col_mappings['name'])
-        desc_col = find_col(col_mappings['description'])
-        start_col = find_col(col_mappings['start_date'])
-        end_col = find_col(col_mappings['end_date'])
-        
-        parsed_records = []
-        existing_program_names = set(Program.objects.values_list('name', flat=True))
-        seen_names_in_file = set()
-        
-        for idx, row in df.iterrows():
-            errors = []
-            
-            # 1. Parse Name
-            raw_name = row.get(name_col) if name_col else None
-            name = str(raw_name).strip() if pd.notna(raw_name) else ""
-            
-            if not name:
-                errors.append("Program Name is required.")
-            else:
-                # Check DB duplicate
-                if name in existing_program_names:
-                    errors.append(f"Program '{name}' already exists in database.")
-                # Check file duplicate
-                if name in seen_names_in_file:
-                    errors.append(f"Program Name '{name}' is duplicated within this file.")
-                seen_names_in_file.add(name)
-            
-            # 2. Parse Description
-            raw_desc = row.get(desc_col) if desc_col else None
-            description = str(raw_desc).strip() if pd.notna(raw_desc) else ""
-            
-            # 3. Parse Dates
-            raw_start = row.get(start_col) if start_col else None
-            raw_end = row.get(end_col) if end_col else None
-            
-            start_date_str = None
-            end_date_str = None
-            
-            # Date format helper
-            def parse_date(val):
-                if pd.isna(val):
-                    return None, None
-                # If Excel parsed it as datetime
-                if isinstance(val, (datetime, date, pd.Timestamp)):
-                    # Convert to datetime date
-                    if hasattr(val, 'date'):
-                        d = val.date()
-                    else:
-                        d = val
-                    return d.strftime('%Y-%m-%d'), None
-                
-                # If String representation
-                val_str = str(val).strip()
-                if not val_str or val_str.lower() in ('nat', 'none', 'null', 'nan'):
-                    return None, None
-                
-                for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y', '%d/%m/%Y', '%Y/%m/%d', '%b %d, %Y', '%d %b %Y'):
-                    try:
-                        parsed_dt = datetime.strptime(val_str, fmt).date()
-                        return parsed_dt.strftime('%Y-%m-%d'), None
-                    except ValueError:
-                        continue
-                return None, f"Invalid date format '{val_str}'"
-            
-            start_date_str, start_err = parse_date(raw_start)
-            if start_err:
-                errors.append(f"Start Date: {start_err}")
-                
-            end_date_str, end_err = parse_date(raw_end)
-            if end_err:
-                errors.append(f"End Date: {end_err}")
-                
-            # Chronological check if dates are valid
-            if start_date_str and end_date_str and not (start_err or end_err):
-                try:
-                    s_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-                    e_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-                    if s_date > e_date:
-                        errors.append("End date must be on or after start date.")
-                except Exception:
-                    pass
-            
-            is_valid = len(errors) == 0
-            
-            parsed_records.append({
-                "row_index": idx + 1,
-                "name": name,
-                "description": description,
-                "start_date": start_date_str,
-                "end_date": end_date_str,
-                "is_valid": is_valid,
-                "errors": errors
-            })
-            
-        summary = {
-            "total_records": len(parsed_records),
-            "valid_records": sum(1 for r in parsed_records if r["is_valid"]),
-            "invalid_records": sum(1 for r in parsed_records if not r["is_valid"])
-        }
-        
+        parsed_records, summary = ProgramService.parse_import(uploaded_file)
         return Response({
             "success": True,
             "records": parsed_records,
             "summary": summary
         })
-        
     except Exception as e:
         logger.error(f"PARSE PROGRAM IMPORT ERROR: {str(e)}")
         return Response({"success": False, "error": f"Failed to parse file: {str(e)}"}, status=400)
@@ -1646,63 +1096,15 @@ def parse_program_import(request):
 @api_view(['POST'])
 def commit_program_import(request):
     try:
+        from core.services import ProgramService
         programs_data = request.data.get('programs', [])
-        if not programs_data:
-            return Response({"success": False, "error": "No program data provided to import"}, status=400)
-        
-        created_programs = []
-        errors = []
-        
-        with transaction.atomic():
-            for idx, p in enumerate(programs_data):
-                name = p.get('name', '').strip()
-                description = p.get('description', '').strip()
-                start_date_str = p.get('start_date')
-                end_date_str = p.get('end_date')
-                
-                if not name:
-                    errors.append(f"Row {idx+1}: Program Name is missing.")
-                    continue
-                
-                # Check DB duplicate inside transaction (safety check)
-                if Program.objects.filter(name=name).exists():
-                    errors.append(f"Row {idx+1}: Program '{name}' already exists in database.")
-                    continue
-                
-                start_date = None
-                end_date = None
-                if start_date_str:
-                    try:
-                        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-                    except ValueError:
-                        pass
-                
-                if end_date_str:
-                    try:
-                        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-                    except ValueError:
-                        pass
-                
-                program = Program.objects.create(
-                    name=name,
-                    description=description,
-                    start_date=start_date,
-                    end_date=end_date,
-                    status='Pending'
-                )
-                
-                created_programs.append({
-                    "id": program.id,
-                    "name": program.name
-                })
-        
+        created_programs, errors = ProgramService.commit_import(programs_data)
         return Response({
             "success": True,
             "created_count": len(created_programs),
             "created": created_programs,
             "errors": errors
         })
-        
     except Exception as e:
         logger.error(f"COMMIT PROGRAM IMPORT ERROR: {str(e)}")
         return Response({"success": False, "error": f"Failed to commit import: {str(e)}"}, status=400)
