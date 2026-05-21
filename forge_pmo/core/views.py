@@ -164,20 +164,22 @@ def get_active_projects(request):
 @api_view(['GET'])
 def get_project_managers(request):
     try:
-        users = User.objects.filter(profile__role='PM', username__in=['khwahish_pm', 'shailja_pgm', 'pranav_spoc', 'yash_tm', 'priya_tm']).select_related('profile')
-        data = [{"id": user.id, "username": user.username} for user in users]
+        from core.services import TeamService
+        data = TeamService.get_project_managers()
         return Response(data, status=200)
     except Exception as e:
+        logger.error(f"views: GET PM ERROR: {str(e)}")
         return Response([], status=200)
 
 
 @api_view(['GET'])
 def get_team_members(request):
     try:
-        users = User.objects.filter(profile__role='TM', username__in=['khwahish_pm', 'shailja_pgm', 'pranav_spoc', 'yash_tm', 'priya_tm']).select_related('profile')
-        data = [{"id": user.id, "username": user.username} for user in users]
+        from core.services import TeamService
+        data = TeamService.get_team_members()
         return Response(data, status=200)
     except Exception as e:
+        logger.error(f"views: GET TM ERROR: {str(e)}")
         return Response({"error": str(e)}, status=500)
 
 
@@ -276,35 +278,11 @@ def create_task(request):
 def get_kanban_tasks(request):
     username = request.query_params.get('username')
     try:
-        # pyrefly: ignore [missing-attribute]
-        tasks = Task.objects.filter(assigned_to__username=username)
-        task_data = []
-        for t in tasks:
-            proj = getattr(t, 'project', None)
-            prog = getattr(proj, 'program', None) if proj else None
-            pm = getattr(proj, 'created_by', None) if proj else None
-            spr = getattr(t, 'sprint', None)
-
-            task_data.append({
-                "id": t.id,
-                "task_title": t.title or "Untitled",
-                "status": t.status or "To Do",
-                "project_name": proj.name if proj else "No Project",
-                # pyrefly: ignore [missing-attribute]
-                "program_name": prog.name if prog else "Standard",
-                "project_manager": pm.username if pm else "Not Assigned",
-                "sprint_name": spr.name if spr else "Unassigned",
-                "sprint_id": spr.id if spr else None,
-                "sprint_status": spr.status if spr else "Planned",
-                "sprint_deadline": spr.end_date.strftime('%Y-%m-%d') if (spr and spr.end_date) else "No Date",
-                "priority": t.priority or "Medium",
-                "hours_logged": str(t.hours_logged or 0.00),
-                "due_date": t.due_date.strftime('%Y-%m-%d') if t.due_date else "No Date",
-                "program_document": prog.document.url if (prog and prog.document) else None
-            })
+        from core.services import TaskService
+        task_data = TaskService.get_kanban_tasks(username)
         return Response(task_data, status=200)
     except Exception as e:
-        logger.error(f"KANBAN ERROR: {str(e)}")
+        logger.error(f"views: KANBAN ERROR: {str(e)}")
         return Response([], status=200)
 
 

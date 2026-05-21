@@ -10,7 +10,10 @@ import {
   topHeaderStyle, mainContentStyle, logoutBtnSide, cardGrid, summCard, sectionTitle,
   alertHeader, tableContainer, tableStyle, theadStyle, thStyle, tdStyle, trStyle,
   primBtn, reviewBtn, secBtn, assignBtn, miniSelect, modalOverlay, modalBox, lbl, inp,
-  valText, reviewGrid, miniTableContainer, miniTh, logoutBtnStyle, statusBadge
+  valText, reviewGrid, miniTableContainer, miniTh, logoutBtnStyle, statusBadge,
+  userCircleStyle, modalContentStyle, liveStatCard, liveStatLabel, liveStatValue,
+  chartContainer, chartHeader, legendContainer, innerCardStyle, innerTitleStyle,
+  miniTableStyle, miniTheadStyle, miniThStyle, miniTrStyle, miniTdStyle
 } from './common/DashboardStyles';
 
 import PMOverview from './pm/PMOverview';
@@ -95,16 +98,7 @@ const PMDashboard = ({ username, onLogout }) => {
   const [roleFilter, setRoleFilter] = useState('All');
   const [expandedResource, setExpandedResource] = useState(null);
 
-  // PROJECT FORM STATE
-  const [projectData, setProjectData] = useState({
-    name: '',
-    description: '',
-    start_date: '',
-    end_date: '',
-    priority: 'Medium',
-    team: [{ userId: '', fte: 1.0, role: 'Dev' }],
-    sprints: [{ name: 'Sprint 1', start_date: '', end_date: '' }],
-  });
+
 
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [selectedProjectForNote, setSelectedProjectForNote] = useState(null);
@@ -314,8 +308,8 @@ const lastStatItem = {
     }
   };
 
-  const handleAddSprint = async () => {
-    if (!sprintName || !sprintStartDate || !sprintEndDate) {
+  const handleAddSprint = async (sprintData) => {
+    if (!sprintData.name || !sprintData.start_date || !sprintData.end_date) {
       showToast('Please fill all sprint fields.', 'error');
       return;
     }
@@ -324,8 +318,8 @@ const lastStatItem = {
     if (selectedProjectForSprint) {
       const pStart = new Date(selectedProjectForSprint.start_date);
       const pEnd = new Date(selectedProjectForSprint.end_date);
-      const sStart = new Date(sprintStartDate);
-      const sEnd = new Date(sprintEndDate);
+      const sStart = new Date(sprintData.start_date);
+      const sEnd = new Date(sprintData.end_date);
 
       if (sStart < pStart || sEnd > pEnd) {
         showToast(`Sprint dates must be within project timeline (${selectedProjectForSprint.start_date} to ${selectedProjectForSprint.end_date})`, 'error');
@@ -343,10 +337,10 @@ const lastStatItem = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: selectedProjectForSprint.id,
-          name: sprintName,
-          start_date: sprintStartDate,
-          end_date: sprintEndDate,
-          sprint_id: sprintIdToUpdate
+          name: sprintData.name,
+          start_date: sprintData.start_date,
+          end_date: sprintData.end_date,
+          sprint_id: sprintData.sprint_id
         })
       });
       const data = await res.json();
@@ -528,29 +522,9 @@ const lastStatItem = {
 
 
 
-  const addMemberRow = () => setProjectData({ ...projectData, team: [...projectData.team, { userId: '', fte: 1.0, role: 'Dev' }] });
-  const removeMemberRow = (index) => setProjectData({ ...projectData, team: projectData.team.filter((_, i) => i !== index) });
-  const addSprintRow = () => {
-    const nextSprintNum = projectData.sprints.length + 1;
-    setProjectData({ ...projectData, sprints: [...projectData.sprints, { name: `Sprint ${nextSprintNum}`, start_date: '', end_date: '' }] });
-  };
-  const removeSprintRow = (index) => setProjectData({ ...projectData, sprints: projectData.sprints.filter((_, i) => i !== index) });
-  const handleInputChange = (field, value) => setProjectData({ ...projectData, [field]: value });
-  const handleMemberChange = (index, field, value) => {
-    const newTeam = [...projectData.team];
-    newTeam[index][field] = field === 'userId' ? (value ? Number(value) : '') : field === 'fte' ? (value ? parseFloat(value) : 0.0) : value;
-    setProjectData({ ...projectData, team: newTeam });
-  };
-  const handleSprintChange = (index, field, value) => {
-    const updatedSprints = [...projectData.sprints];
-    updatedSprints[index][field] = value;
-    setProjectData({ ...projectData, sprints: updatedSprints });
-  };
-
-  const handleSubmitPlan = async (e) => {
-    e.preventDefault();
-    const formattedTeam = projectData.team.map(m => ({ userId: m.userId, role: m.role, fte: m.fte }));
-    const payload = { ...projectData, team: formattedTeam, program_id: selectedProgram?.id, pm_username: username };
+  const handleSubmitPlan = async (formData) => {
+    const formattedTeam = formData.team.map(m => ({ userId: Number(m.userId), role: m.role, fte: m.fte }));
+    const payload = { ...formData, team: formattedTeam, program_id: selectedProgram?.id, pm_username: username };
     try {
       const response = await fetch('http://127.0.0.1:8000/api/create-project-plan/', {
         method: 'POST',
@@ -558,12 +532,15 @@ const lastStatItem = {
         body: JSON.stringify(payload)
       });
       if (response.ok) {
-        showToast(' Project plan submitted successfully!', 'success');
+        showToast('Project plan submitted successfully!', 'success');
         setShowProjectForm(false);
-        setProjectData({ name: '', description: '', start_date: '', end_date: '', priority: 'Medium', team: [{ userId: '', fte: 1.0, role: 'Dev' }], sprints: [{ name: 'Sprint 1', start_date: '', end_date: '' }] });
-        fetchData();
+        fetchData(true);
+      } else {
+        showToast('Failed to submit project plan.', 'error');
       }
-    } catch (err) { showToast(' Connection failed. Check your server.', 'error'); }
+    } catch (err) {
+      showToast('Connection failed. Check your server.', 'error');
+    }
   };
 
 
@@ -751,17 +728,10 @@ const lastStatItem = {
         {showProjectForm && (
           <PMProjectPlanForm
             selectedProgram={selectedProgram}
-            projectData={projectData}
             employees={employees}
-            onInputChange={handleInputChange}
-            onMemberChange={handleMemberChange}
-            addMemberRow={addMemberRow}
-            removeMemberRow={removeMemberRow}
-            onSprintChange={handleSprintChange}
-            addSprintRow={addSprintRow}
-            removeSprintRow={removeSprintRow}
             onSubmitPlan={handleSubmitPlan}
             onClose={() => setShowProjectForm(false)}
+            showToast={showToast}
           />
         )}
         </div>
@@ -800,14 +770,11 @@ const lastStatItem = {
 
       {/* --- REQUEST ADDITIONAL SPRINT MODAL --- */}
       <PMSprintRequestModal
-        showSprintModal={showSprintModal}
+        isOpen={showSprintModal}
         sprintIdToUpdate={sprintIdToUpdate}
-        sprintName={sprintName}
-        onSprintNameChange={setSprintName}
-        sprintStartDate={sprintStartDate}
-        onSprintStartDateChange={setSprintStartDate}
-        sprintEndDate={sprintEndDate}
-        onSprintEndDateChange={setSprintEndDate}
+        initialSprintName={sprintName}
+        initialStartDate={sprintStartDate}
+        initialEndDate={sprintEndDate}
         selectedProjectForSprint={selectedProjectForSprint}
         onSubmit={handleAddSprint}
         onClose={() => setShowSprintModal(false)}
@@ -835,45 +802,5 @@ const lastStatItem = {
     </div>
   );
 };
-
-// --- PREMIUM STYLES (MATCHING PGM DESIGN) ---
-// All shared styles are cleanly imported from DashboardStyles.js above
-const userCircleStyle = { width: '35px', height: '35px', borderRadius: '50%', backgroundColor: '#2563EB', color: '#fff', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold' };
-
-const modalContentStyle = { background: '#fff', padding: '30px', borderRadius: '15px', position: 'relative' };
-
-const liveStatCard = (color) => ({ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0', borderTop: `4px solid ${color}` });
-const liveStatLabel = { fontSize: '10px', fontWeight: '800', color: '#64748b', marginBottom: '5px' };
-const liveStatValue = { fontSize: '24px', fontWeight: '800', color: '#1B3A6B' };
-const chartContainer = { background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0' };
-const chartHeader = { margin: '0 0 15px 0', fontSize: '13px', color: '#1e293b' };
-const legendContainer = { display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '11px', marginTop: '10px' };
-
-const CustomTooltip = ({ active, payload }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div style={{ background: '#fff', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-        <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>{payload[0].payload.name}</p>
-        <p style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#1B3A6B' }}>{payload[0].value}% Complete</p>
-      </div>
-    );
-  }
-  return null;
-};
-
-const LegendItem = ({ color, label }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: color }}></div>
-    <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748b' }}>{label}</span>
-  </div>
-);
-
-const innerCardStyle = { background: '#fff', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' };
-const innerTitleStyle = { margin: '0 0 10px 0', fontSize: '14px', fontWeight: '800', color: '#1B3A6B' };
-const miniTableStyle = { width: '100%', borderCollapse: 'collapse' };
-const miniTheadStyle = { borderBottom: '2px solid #f1f5f9' };
-const miniThStyle = { padding: '10px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase' };
-const miniTrStyle = { borderBottom: '1px solid #f1f5f9' };
-const miniTdStyle = { padding: '10px', fontSize: '13px', color: '#475569' };
 
 export default PMDashboard;

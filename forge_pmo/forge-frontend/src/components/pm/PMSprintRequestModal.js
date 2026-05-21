@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   lbl, inp
 } from '../common/DashboardStyles';
@@ -13,19 +13,37 @@ const formatDate = (dateStr) => {
 };
 
 export default function PMSprintRequestModal({
-  showSprintModal,
+  isOpen,
   sprintIdToUpdate,
-  sprintName,
-  onSprintNameChange,
-  sprintStartDate,
-  onSprintStartDateChange,
-  sprintEndDate,
-  onSprintEndDateChange,
+  initialSprintName,
+  initialStartDate,
+  initialEndDate,
   selectedProjectForSprint,
   onSubmit,
   onClose
 }) {
-  if (!showSprintModal) return null;
+  const [sprintName, setSprintName] = useState('');
+  const [sprintStartDate, setSprintStartDate] = useState('');
+  const [sprintEndDate, setSprintEndDate] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setSprintName(initialSprintName || '');
+      setSprintStartDate(initialStartDate || '');
+      setSprintEndDate(initialEndDate || '');
+    }
+  }, [isOpen, initialSprintName, initialStartDate, initialEndDate]);
+
+  if (!isOpen) return null;
+
+  const handleFormSubmit = () => {
+    onSubmit({
+      name: sprintName,
+      start_date: sprintStartDate,
+      end_date: sprintEndDate,
+      sprint_id: sprintIdToUpdate
+    });
+  };
 
   const modalOverlayStyle = {
     position: 'fixed',
@@ -68,7 +86,7 @@ export default function PMSprintRequestModal({
               required 
               placeholder="e.g. Sprint 3" 
               value={sprintName} 
-              onChange={(e) => onSprintNameChange(e.target.value)} 
+              onChange={(e) => setSprintName(e.target.value)} 
             />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
@@ -81,7 +99,7 @@ export default function PMSprintRequestModal({
                 min={selectedProjectForSprint?.start_date}
                 max={selectedProjectForSprint?.end_date}
                 value={sprintStartDate} 
-                onChange={(e) => onSprintStartDateChange(e.target.value)} 
+                onChange={(e) => setSprintStartDate(e.target.value)} 
               />
             </div>
             <div>
@@ -93,13 +111,13 @@ export default function PMSprintRequestModal({
                 min={selectedProjectForSprint?.start_date}
                 max={selectedProjectForSprint?.end_date}
                 value={sprintEndDate} 
-                onChange={(e) => onSprintEndDateChange(e.target.value)} 
+                onChange={(e) => setSprintEndDate(e.target.value)} 
               />
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
             <button onClick={onClose} style={{ background: '#f1f5f9', color: '#475569', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
-            <button onClick={onSubmit} style={{ background: '#0891b2', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>{sprintIdToUpdate ? 'Update Sprint' : 'Request Sprint'}</button>
+            <button onClick={handleFormSubmit} style={{ background: '#0891b2', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>{sprintIdToUpdate ? 'Update Sprint' : 'Request Sprint'}</button>
           </div>
         </div>
       </div>

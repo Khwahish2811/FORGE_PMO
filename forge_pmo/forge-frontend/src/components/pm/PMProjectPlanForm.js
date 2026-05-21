@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   primBtn, secBtn, lbl, inp
 } from '../common/DashboardStyles';
@@ -7,18 +7,111 @@ const miniThStyle = { padding: '10px', textAlign: 'left', fontSize: '11px', colo
 
 export default function PMProjectPlanForm({
   selectedProgram,
-  projectData,
   employees,
-  onInputChange,
-  onMemberChange,
-  addMemberRow,
-  removeMemberRow,
-  onSprintChange,
-  addSprintRow,
-  removeSprintRow,
   onSubmitPlan,
-  onClose
+  onClose,
+  showToast
 }) {
+  const [projectData, setProjectData] = useState({
+    name: '',
+    description: '',
+    start_date: '',
+    end_date: '',
+    priority: 'Medium',
+    team: [{ userId: '', fte: 1.0, role: 'Dev' }],
+    sprints: [{ name: 'Sprint 1', start_date: '', end_date: '' }],
+  });
+
+  const onInputChange = (key, value) => {
+    setProjectData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const onMemberChange = (idx, key, value) => {
+    setProjectData(prev => {
+      const copy = [...prev.team];
+      copy[idx] = { ...copy[idx], [key]: key === 'fte' ? parseFloat(value) || 0 : value };
+      return { ...prev, team: copy };
+    });
+  };
+
+  const addMemberRow = () => {
+    setProjectData(prev => ({
+      ...prev,
+      team: [...prev.team, { userId: '', fte: 1.0, role: 'Dev' }]
+    }));
+  };
+
+  const removeMemberRow = (idx) => {
+    setProjectData(prev => ({
+      ...prev,
+      team: prev.team.filter((_, i) => i !== idx)
+    }));
+  };
+
+  const onSprintChange = (idx, key, value) => {
+    setProjectData(prev => {
+      const copy = [...prev.sprints];
+      copy[idx] = { ...copy[idx], [key]: value };
+      return { ...prev, sprints: copy };
+    });
+  };
+
+  const addSprintRow = () => {
+    setProjectData(prev => ({
+      ...prev,
+      sprints: [...prev.sprints, { name: `Sprint ${prev.sprints.length + 1}`, start_date: '', end_date: '' }]
+    }));
+  };
+
+  const removeSprintRow = (idx) => {
+    setProjectData(prev => ({
+      ...prev,
+      sprints: prev.sprints.filter((_, i) => i !== idx)
+    }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    if (projectData.team.some(m => !m.userId)) {
+      showToast('Please assign a member to all selected team slots.', 'warning');
+      return;
+    }
+
+    const pStart = new Date(selectedProgram.start_date);
+    const pEnd = new Date(selectedProgram.end_date);
+    const prjStart = new Date(projectData.start_date);
+    const prjEnd = new Date(projectData.end_date);
+
+    if (prjStart < pStart || prjEnd > pEnd) {
+      showToast(`Project timeline must be within Program bounds (${selectedProgram.start_date} to ${selectedProgram.end_date})`, 'error');
+      return;
+    }
+    if (prjStart > prjEnd) {
+      showToast('Project start date must be before end date.', 'error');
+      return;
+    }
+
+    for (let s of projectData.sprints) {
+      if (!s.name || !s.start_date || !s.end_date) {
+        showToast('Please fill all sprint fields.', 'error');
+        return;
+      }
+      const sStart = new Date(s.start_date);
+      const sEnd = new Date(s.end_date);
+      if (sStart < prjStart || sEnd > prjEnd) {
+        showToast(`Sprint '${s.name}' must be within project timeline (${projectData.start_date} to ${projectData.end_date})`, 'error');
+        return;
+      }
+      if (sStart > sEnd) {
+        showToast(`Sprint '${s.name}' start date must be before end date.`, 'error');
+        return;
+      }
+    }
+
+    onSubmitPlan(projectData);
+  };
+
   const modalOverlayStyle = {
     position: 'fixed',
     top: 0,
@@ -49,7 +142,7 @@ export default function PMProjectPlanForm({
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' }}>✕</button>
         </div>
         
-        <form onSubmit={onSubmitPlan} style={{ padding: '30px', maxHeight: '80vh', overflowY: 'auto' }}>
+        <form onSubmit={handleSubmit} style={{ padding: '30px', maxHeight: '80vh', overflowY: 'auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
             <div style={{ gridColumn: 'span 2' }}>
               <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}> Project Name</label>
@@ -62,16 +155,16 @@ export default function PMProjectPlanForm({
             <div>
                 <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}> Start Date</label>
                 <input type="date" style={{...inp, padding: '12px', borderRadius: '8px'}} required 
-                    min={selectedProgram?.start_date} max={selectedProgram?.end_date}
-                    value={projectData.start_date} onChange={(e) => onInputChange('start_date', e.target.value)} 
+                     min={selectedProgram?.start_date} max={selectedProgram?.end_date}
+                     value={projectData.start_date} onChange={(e) => onInputChange('start_date', e.target.value)} 
                 />
                 <small style={{color: '#64748b', fontSize: '10px'}}>Program Start: {selectedProgram?.start_date}</small>
             </div>
             <div>
                 <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}> End Date</label>
                 <input type="date" style={{...inp, padding: '12px', borderRadius: '8px'}} required 
-                    min={selectedProgram?.start_date} max={selectedProgram?.end_date}
-                    value={projectData.end_date} onChange={(e) => onInputChange('end_date', e.target.value)} 
+                     min={selectedProgram?.start_date} max={selectedProgram?.end_date}
+                     value={projectData.end_date} onChange={(e) => onInputChange('end_date', e.target.value)} 
                 />
                 <small style={{color: '#64748b', fontSize: '10px'}}>Program End: {selectedProgram?.end_date}</small>
             </div>
@@ -117,12 +210,12 @@ export default function PMProjectPlanForm({
               <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 40px', gap: '10px', marginBottom: '12px', alignItems: 'center' }}>
                 <input style={{...inp, margin: 0, padding: '8px'}} value={s.name} onChange={(e) => onSprintChange(idx, 'name', e.target.value)} placeholder="Sprint Name" />
                 <input type="date" style={{...inp, margin: 0, padding: '8px'}} 
-                    min={projectData.start_date} max={projectData.end_date}
-                    value={s.start_date} onChange={(e) => onSprintChange(idx, 'start_date', e.target.value)} 
+                     min={projectData.start_date} max={projectData.end_date}
+                     value={s.start_date} onChange={(e) => onSprintChange(idx, 'start_date', e.target.value)} 
                 />
                 <input type="date" style={{...inp, margin: 0, padding: '8px'}} 
-                    min={projectData.start_date} max={projectData.end_date}
-                    value={s.end_date} onChange={(e) => onSprintChange(idx, 'end_date', e.target.value)} 
+                     min={projectData.start_date} max={projectData.end_date}
+                     value={s.end_date} onChange={(e) => onSprintChange(idx, 'end_date', e.target.value)} 
                 />
                 <button type="button" onClick={() => removeSprintRow(idx)} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', fontSize: '16px' }}>✕</button>
               </div>

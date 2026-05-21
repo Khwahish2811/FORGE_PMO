@@ -148,3 +148,22 @@ export const statusBadge = (s) => ({
   background: s === 'Approved' ? '#dcfce7' : s === 'Rejected' ? '#fee2e2' : '#fef3c7',
   color: s === 'Approved' ? '#166534' : s === 'Rejected' ? '#991b1b' : '#92400e',
 });
+
+export const userCircleStyle = { width: '35px', height: '35px', borderRadius: '50%', backgroundColor: '#2563EB', color: '#fff', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold' };
+
+export const modalContentStyle = { background: '#fff', padding: '30px', borderRadius: '15px', position: 'relative' };
+
+export const liveStatCard = (color) => ({ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0', borderTop: `4px solid ${color}` });
+export const liveStatLabel = { fontSize: '10px', fontWeight: '800', color: '#64748b', marginBottom: '5px' };
+export const liveStatValue = { fontSize: '24px', fontWeight: '800', color: '#1B3A6B' };
+export const chartContainer = { background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0' };
+export const chartHeader = { margin: '0 0 15px 0', fontSize: '13px', color: '#1e293b' };
+export const legendContainer = { display: 'flex', justifyContent: 'center', gap: '15px', fontSize: '11px', marginTop: '10px' };
+
+export const innerCardStyle = { background: '#fff', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' };
+export const innerTitleStyle = { margin: '0 0 10px 0', fontSize: '14px', fontWeight: '800', color: '#1B3A6B' };
+export const miniTableStyle = { width: '100%', borderCollapse: 'collapse' };
+export const miniTheadStyle = { borderBottom: '2px solid #f1f5f9' };
+export const miniThStyle = { padding: '10px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase' };
+export const miniTrStyle = { borderBottom: '1px solid #f1f5f9' };
+export const miniTdStyle = { padding: '10px', fontSize: '13px', color: '#475569' };
