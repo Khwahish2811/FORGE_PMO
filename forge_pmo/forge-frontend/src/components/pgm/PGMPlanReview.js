@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   tableContainer, tableStyle, theadStyle, thStyle, tdStyle, trStyle,
-  primBtn, reviewBtn, lbl, inp
+  primBtn, reviewBtn, lbl, inp, secBtn
 } from '../common/DashboardStyles';
 
 export default function PGMPlanReview({
