@@ -1,30 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, LineChart, Line, AreaChart, Area, CartesianGrid, BarChart, Bar, Legend } from 'recharts';
-import NotificationPanel from './common/NotificationPanel';
-import ResourceAnalytics from './common/ResourceAnalytics';
-import PerformanceDashboard from './common/PerformanceDashboard';
-import ProgramTrackerModal from './common/ProgramTrackerModal';
-import { Chart } from "react-google-charts";
-import {
-  layoutContainer, sidebarStyle, sidebarScrollArea, logoBox, sbItem, activeSbItem,
-  topHeaderStyle, mainContentStyle, logoutBtnSide, cardGrid, summCard, sectionTitle,
-  alertHeader, tableContainer, tableStyle, theadStyle, thStyle, tdStyle, trStyle,
-  primBtn, reviewBtn, secBtn, assignBtn, miniSelect, modalOverlay, modalBox, lbl, inp,
-  valText, reviewGrid, miniTableContainer, miniTh, logoutBtnStyle, statusBadge,
-  userCircleStyle, modalContentStyle, liveStatCard, liveStatLabel, liveStatValue,
-  chartContainer, chartHeader, legendContainer, innerCardStyle, innerTitleStyle,
-  miniTableStyle, miniTheadStyle, miniThStyle, miniTrStyle, miniTdStyle
-} from './common/DashboardStyles';
+import { layoutContainer, mainContentStyle } from './common/DashboardStyles';
 
 import PMOverview from './pm/PMOverview';
-import PMProjectPlanForm from './pm/PMProjectPlanForm';
 import PMOngoingWorkspace from './pm/PMOngoingWorkspace';
 import PMWorkingPrograms from './pm/PMWorkingPrograms';
-import PMCreateTaskModal from './pm/PMCreateTaskModal';
-import PMSprintRequestModal from './pm/PMSprintRequestModal';
-import UserProfileModal from './common/UserProfileModal';
-import PMUpdateNoteModal from './pm/PMUpdateNoteModal';
-import PMMemberPerformanceModal from './pm/PMMemberPerformanceModal';
+import ResourceAnalytics from './common/ResourceAnalytics';
+import PerformanceDashboard from './common/PerformanceDashboard';
+
+import ToastNotification from './common/ToastNotification';
+import PMSidebar from './pm/PMSidebar';
+import PMHeader from './pm/PMHeader';
+import PMModals from './pm/PMModals';
 
 // 1. Helper function for health status colors
 const getStatusColor = (endDate) => {
@@ -528,236 +514,140 @@ const lastStatItem = {
   };
   return (
     <div style={layoutContainer}>
-      
-      <UserProfileModal
-        isOpen={showProfileModal}
-        onClose={() => setShowProfileModal(false)}
-        profileData={profileData}
+      <ToastNotification message={toastMessage?.msg} type={toastMessage?.type} />
+
+      <PMSidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        setShowProjectForm={setShowProjectForm}
+        onLogout={onLogout}
       />
-      {/* TOAST NOTIFICATION */}
-      {toastMessage && (
-        <div style={{
-          position: 'fixed',
-          top: '30px',
-          right: '30px',
-          background: toastMessage.type === 'error' ? '#ef4444' : toastMessage.type === 'warning' ? '#f59e0b' : '#10b981',
-          color: 'white',
-          padding: '16px 24px',
-          borderRadius: '10px',
-          boxShadow: toastMessage.type === 'error' ? '0 10px 25px -5px rgba(239,68,68,0.4)' : toastMessage.type === 'warning' ? '0 10px 25px -5px rgba(245,158,11,0.4)' : '0 10px 25px -5px rgba(16, 185, 129, 0.4)',
-          zIndex: 9999,
-          fontWeight: '600',
-          fontSize: '14px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          animation: 'slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
-        }}>
-          {toastMessage.msg}
-        </div>
-      )}
-
-      {/* SIDEBAR */}
-      <div style={sidebarStyle}>
-        <div style={logoBox}>
-          <span style={{ fontSize: '11px', fontWeight: '500', color: '#93c5fd', letterSpacing: '2px', textTransform: 'uppercase' }}>AM/NS</span>
-          <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>FORGE</span>
-        </div>
-        
-        <div style={sidebarScrollArea}>
-          <div style={{ padding: '0 20px 8px 20px', fontSize: '11px', color: '#88a3d4', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.2px' }}>
-            Navigation
-          </div>
-          <div
-            style={activeTab === 'assignments' ? activeSbItem : sbItem}
-            onClick={() => { setActiveTab('assignments'); setShowProjectForm(false); }}
-          >
-            My Assignments
-          </div>
-          <div
-            style={activeTab === 'execution' ? activeSbItem : sbItem}
-            onClick={() => { setActiveTab('execution'); setShowProjectForm(false); }}
-          >
-            Project Execution
-          </div>
-          <div
-            style={activeTab === 'working_programs' ? activeSbItem : sbItem}
-            onClick={() => { setActiveTab('working_programs'); setShowProjectForm(false); }}
-          >
-            Working Programs
-          </div>
-          <div
-            style={activeTab === 'performance' ? activeSbItem : sbItem}
-            onClick={() => { setActiveTab('performance'); setShowProjectForm(false); }}
-          >
-            Team Performance
-          </div>
-          <div
-            style={activeTab === 'resource_analytics' ? activeSbItem : sbItem}
-            onClick={() => { setActiveTab('resource_analytics'); setShowProjectForm(false); }}
-          >
-            Resource Analytics
-          </div>
-        </div>
-
-        <button onClick={onLogout} style={logoutBtnSide}>LOGOUT</button>
-      </div>
 
       <div style={mainContentStyle}>
-        {/* HEADER */}
-        <div style={topHeaderStyle}>
-          <span style={{ fontWeight: 700, color: '#1B3A6B' }}>Project Manager Dashboard</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            
-            {/* NOTIFICATION BELL */}
-            <NotificationPanel
-              notifications={notifications}
-              showNotifications={showNotifications}
-              setShowNotifications={setShowNotifications}
-              markRead={markRead}
-            />
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} onClick={() => setShowProfileModal(true)}>
-                <span style={{ fontSize: '12px' }}>Welcome, <b>{username}</b></span>
-                <div style={{ ...userCircleStyle, background: 'linear-gradient(135deg, #1B3A6B, #3B82F6)', color: '#fff', fontWeight: 'bold' }}>
-                    {username?.charAt(0).toUpperCase() || 'U'}
-                </div>
-            </div>
-          </div>
-        </div>
-
+        <PMHeader
+          username={username}
+          notifications={notifications}
+          showNotifications={showNotifications}
+          setShowNotifications={setShowNotifications}
+          markRead={markRead}
+          setShowProfileModal={setShowProfileModal}
+        />
 
         <div style={{ padding: '25px', overflowY: 'auto' }}>
+          {activeTab === 'performance' && (
+            <PerformanceDashboard
+              teamPerformance={teamPerformance}
+              setSelectedMemberDetail={setSelectedMemberDetail}
+            />
+          )}
+
+          {activeTab === 'resource_analytics' && (
+            <ResourceAnalytics resources={resources} />
+          )}
+
+          {activeTab === 'execution' && (
             <>
-              {activeTab === 'performance' && (
-                <PerformanceDashboard
-                  teamPerformance={teamPerformance}
-                  setSelectedMemberDetail={setSelectedMemberDetail}
-                />
-              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#1B3A6B' }}>Project Execution & Task Management</h3>
+              </div>
+              <PMOngoingWorkspace
+                myProjects={myProjects}
+                expandedProjectId={expandedProjectId}
+                onToggleExpand={toggleRow}
+                onCreateTask={(project) => {
+                  setIsStartWorkingWorkflow(false);
+                  setTasksList([{ title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' }]);
+                  setActiveProjectForTask(project);
+                  setShowTaskModal(true);
+                }}
+                onUpdateNote={(project) => {
+                  setSelectedProjectForNote(project);
+                  setShowNoteModal(true);
+                }}
+                onAddSprint={(project) => {
+                  setSprintIdToUpdate(null);
+                  setSprintName('');
+                  setSprintStartDate('');
+                  setSprintEndDate('');
+                  setSelectedProjectForSprint(project);
+                  setShowSprintModal(true);
+                }}
+                onTriggerUpdateSprint={(sprint, project) => {
+                  setSprintIdToUpdate(sprint.id);
+                  setSprintName(sprint.name);
+                  setSprintStartDate(sprint.start_date);
+                  setSprintEndDate(sprint.end_date);
+                  setSelectedProjectForSprint(project);
+                  setShowSprintModal(true);
+                }}
+              />
+            </>
+          )}
 
+          {activeTab === 'assignments' && (
+            <PMOverview
+              assignedPrograms={assignedPrograms}
+              stats={stats}
+              resources={resources}
+              username={username}
+              onBuildPlan={(pgm) => {
+                if (pgm.status_label === 'Approved') {
+                  handleStartWorking(pgm);
+                } else {
+                  handleBuildPlan(pgm);
+                }
+              }}
+              onLiveTrack={handleLiveTrack}
+            />
+          )}
 
-        {/* RESOURCE PERFORMANCE & ANALYTICS OPERATION VIEW */}
-        {activeTab === 'resource_analytics' && (
-          <ResourceAnalytics resources={resources} />
-        )}
-
-              {activeTab === 'execution' && (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#1B3A6B' }}>Project Execution & Task Management</h3>
-                  </div>
-                  <PMOngoingWorkspace
-                    myProjects={myProjects}
-                    expandedProjectId={expandedProjectId}
-                    onToggleExpand={toggleRow}
-                    onCreateTask={(project) => {
-                      setIsStartWorkingWorkflow(false);
-                      setTasksList([{ title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' }]);
-                      setActiveProjectForTask(project);
-                      setShowTaskModal(true);
-                    }}
-                    onUpdateNote={(project) => {
-                      setSelectedProjectForNote(project);
-                      setShowNoteModal(true);
-                    }}
-                    onAddSprint={(project) => {
-                      setSprintIdToUpdate(null);
-                      setSprintName('');
-                      setSprintStartDate('');
-                      setSprintEndDate('');
-                      setSelectedProjectForSprint(project);
-                      setShowSprintModal(true);
-                    }}
-                    onTriggerUpdateSprint={(sprint, project) => {
-                      setSprintIdToUpdate(sprint.id);
-                      setSprintName(sprint.name);
-                      setSprintStartDate(sprint.start_date);
-                      setSprintEndDate(sprint.end_date);
-                      setSelectedProjectForSprint(project);
-                      setShowSprintModal(true);
-                    }}
-                  />
-                </>
-              )}
-              {activeTab === 'assignments' && (
-                <PMOverview
-                  assignedPrograms={assignedPrograms}
-                  stats={stats}
-                  resources={resources}
-                  username={username}
-                  onBuildPlan={(pgm) => {
-                    if (pgm.status_label === 'Approved') {
-                      handleStartWorking(pgm);
-                    } else {
-                      handleBuildPlan(pgm);
-                    }
-                  }}
-                  onLiveTrack={handleLiveTrack}
-                />
-              )}
-              {activeTab === 'working_programs' && (
-                <PMWorkingPrograms
-                  workingPrograms={workingPrograms}
-                  onLiveTrack={handleLiveTrack}
-                />
-              )}
-              </>
-        {showProjectForm && (
-          <PMProjectPlanForm
-            selectedProgram={selectedProgram}
-            employees={employees}
-            onSubmitPlan={handleSubmitPlan}
-            onClose={() => setShowProjectForm(false)}
-            showToast={showToast}
-          />
-        )}
+          {activeTab === 'working_programs' && (
+            <PMWorkingPrograms
+              workingPrograms={workingPrograms}
+              onLiveTrack={handleLiveTrack}
+            />
+          )}
         </div>
       </div>
 
-      {/* LIVE TRACKER MODAL - MATCHING PGM DESIGN */}
-      <ProgramTrackerModal
-        isOpen={showTrackerModal}
-        onClose={() => setShowTrackerModal(false)}
+      <PMModals
+        showProfileModal={showProfileModal}
+        setShowProfileModal={setShowProfileModal}
+        profileData={profileData}
+        showProjectForm={showProjectForm}
+        setShowProjectForm={setShowProjectForm}
+        selectedProgram={selectedProgram}
+        employees={employees}
+        handleSubmitPlan={handleSubmitPlan}
+        showToast={showToast}
+        showTrackerModal={showTrackerModal}
+        setShowTrackerModal={setShowTrackerModal}
         selectedProgramStats={selectedProgramStats}
-        onDownloadCSV={handleDownloadReport}
-      />
-
-      <PMCreateTaskModal
+        handleDownloadReport={handleDownloadReport}
         showTaskModal={showTaskModal}
+        handleCloseTaskModal={handleCloseTaskModal}
         activeProjectForTask={activeProjectForTask}
         tasksList={tasksList}
-        onTasksListChange={setTasksList}
+        setTasksList={setTasksList}
         isStartWorkingWorkflow={isStartWorkingWorkflow}
-        onAddTaskRow={() => setTasksList(prev => [...prev, { title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' }])}
-        onRemoveTaskRow={(idx) => setTasksList(prev => prev.filter((_, i) => i !== idx))}
-        onSubmit={handleCreateTasks}
-        onClose={handleCloseTaskModal}
-      />
-
-      <PMUpdateNoteModal
+        handleCreateTasks={handleCreateTasks}
         showNoteModal={showNoteModal}
+        setShowNoteModal={setShowNoteModal}
         selectedProjectForNote={selectedProjectForNote}
         updateNoteText={updateNoteText}
-        onUpdateNoteTextChange={setUpdateNoteText}
-        onSubmit={handlePostNote}
-        onClose={() => setShowNoteModal(false)}
-        modalOverlayStyle={modalOverlayStyle}
-        modalContentStyle={modalContentStyle}
-      />
-
-      {/* --- REQUEST ADDITIONAL SPRINT MODAL --- */}
-      <PMSprintRequestModal
-        isOpen={showSprintModal}
+        setUpdateNoteText={setUpdateNoteText}
+        handlePostNote={handlePostNote}
+        showSprintModal={showSprintModal}
+        setShowSprintModal={setShowSprintModal}
         sprintIdToUpdate={sprintIdToUpdate}
-        initialSprintName={sprintName}
-        initialStartDate={sprintStartDate}
-        initialEndDate={sprintEndDate}
+        sprintName={sprintName}
+        sprintStartDate={sprintStartDate}
+        sprintEndDate={sprintEndDate}
         selectedProjectForSprint={selectedProjectForSprint}
-        onSubmit={handleAddSprint}
-        onClose={() => setShowSprintModal(false)}
+        handleAddSprint={handleAddSprint}
+        selectedMemberDetail={selectedMemberDetail}
+        setSelectedMemberDetail={setSelectedMemberDetail}
       />
-
 
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -773,10 +663,6 @@ const lastStatItem = {
         .activity-card { transition: all 0.2s ease; border: 1px solid transparent; }
         .activity-card:hover { border-color: #e0e7ff; background: #fff !important; transform: scale(1.01); }
       `}</style>
-      <PMMemberPerformanceModal
-        selectedMemberDetail={selectedMemberDetail}
-        onClose={() => setSelectedMemberDetail(null)}
-      />
     </div>
   );
 };
