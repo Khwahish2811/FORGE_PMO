@@ -13,6 +13,10 @@ import {
   valText, reviewGrid, miniTableContainer, miniTh, logoutBtnStyle, statusBadge
 } from './common/DashboardStyles';
 
+import PMOverview from './pm/PMOverview';
+import PMProjectPlanForm from './pm/PMProjectPlanForm';
+import PMOngoingWorkspace from './pm/PMOngoingWorkspace';
+
 // 1. Helper function for health status colors
 const getStatusColor = (endDate) => {
     if (!endDate) return '#cbd5e1';
@@ -771,401 +775,54 @@ const lastStatItem = {
                     </div>
                   </div>
 
-                  <div style={tableContainer}>
-                    <table style={tableStyle}>
-                      <thead style={theadStyle}>
-                        <tr><th style={thStyle}>PROJECT NAME</th><th style={thStyle}>PROJECT FTE</th><th style={thStyle}>TEAM WORKLOAD</th><th style={thStyle}>STATUS</th><th style={thStyle}>TASK ACTION</th></tr>
-                      </thead>
-                      <tbody>
-                        {myProjects.map((project) => (
-                          <React.Fragment key={project.id}>
-                            <tr style={trStyle}>
-                              <td style={tdStyle}><span onClick={() => toggleRow(project.id)} style={{ cursor: 'pointer', color: '#2563EB', textDecoration: 'underline' }}><b>{project.name}</b> {expandedProjectId === project.id ? '' : ''}</span></td>
-                              <td style={tdStyle}>
-                                <span style={{
-                                  background: '#EFF6FF',
-                                  color: '#1E40AF',
-                                  padding: '5px 12px',
-                                  borderRadius: '12px',
-                                  fontSize: '11px',
-                                  fontWeight: 'bold',
-                                  border: '1px solid #BFDBFE',
-                                  display: 'inline-block'
-                                }}>
-                                  {(project.team_members || []).reduce((sum, m) => sum + parseFloat(m.fte || 0), 0).toFixed(2)} FTE
-                                </span>
-                              </td>
-                              <td style={tdStyle}>
-                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                                  {project.team_members && project.team_members.length > 0 ? (
-                                    project.team_members.map((m, idx) => {
-                                      const isOverloaded = (m.task_count || 0) > 5;
-                                      const nameParts = m.username.split('_');
-                                      const initials = nameParts.length > 1
-                                        ? (nameParts[0].charAt(0) + nameParts[1].charAt(0)).toUpperCase()
-                                        : m.username.substring(0, 2).toUpperCase();
-                                      const shortLabel = nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1, 5) + '-' + (idx + 1);
-                                      return (
-                                      <div key={idx} title={`${m.username}: ${m.task_count || 0} Task(s)`} style={{
-                                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px'
-                                      }}>
-                                        <div style={{
-                                          position: 'relative', width: '34px', height: '34px', borderRadius: '50%',
-                                          background: isOverloaded ? 'linear-gradient(135deg,#fee2e2,#fca5a5)' : 'linear-gradient(135deg,#e0e7ff,#c7d2fe)',
-                                          border: isOverloaded ? '2px solid #ef4444' : '2px solid #6366f1',
-                                          display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '10px', fontWeight: '800',
-                                          color: isOverloaded ? '#991b1b' : '#3730a3', boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
-                                        }}>
-                                          {initials}
-                                          <div style={{
-                                            position: 'absolute', top: '-5px', right: '-5px',
-                                            background: isOverloaded ? '#ef4444' : '#2563EB', color: '#fff',
-                                            fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%',
-                                            display: 'flex', justifyContent: 'center', alignItems: 'center',
-                                            border: '1.5px solid #fff', fontWeight: 'bold'
-                                          }}>
-                                            {m.task_count || 0}
-                                          </div>
-                                        </div>
-                                        <span style={{ fontSize: '9px', color: isOverloaded ? '#ef4444' : '#64748b', fontWeight: '600', whiteSpace: 'nowrap' }}>
-                                          {shortLabel}
-                                        </span>
-                                      </div>
-                                    )})
-                                  ) : (
-                                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>No Team</span>
-                                  )}
-                                </div>
-                              </td>
-                             <td style={tdStyle}>
-  <span style={{
-    padding: '6px 14px',
-    borderRadius: '20px',
-    fontSize: '11px',
-    fontWeight: '700',
-    backgroundColor: (project.status === 'Active' || project.status === 'Approved' || project.status === 'In Progress') ? '#dcfce7' : '#fef3c7',
-    color: (project.status === 'Active' || project.status === 'Approved' || project.status === 'In Progress') ? '#15803d' : '#92400e',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px'
-  }}>
-    {project.status === 'In Progress' ? <><span className="pulse-dot"></span> IN PROGRESS</> : project.status.toUpperCase()}
-  </span>
-</td>
-                              <td style={tdStyle}>
-                                {/* Active or Approved or In Progress */}
-                                {(project.status === 'Active' || project.status === 'Approved' || project.status === 'In Progress') ? (
-                                  <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button
-                                      onClick={() => {
-                                        setIsStartWorkingWorkflow(false);
-                                        setTasksList([{ title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' }]);
-                                        setActiveProjectForTask(project);
-                                        setShowTaskModal(true);
-                                      }}
-                                      style={{ ...primBtn, padding: '6px 12px', fontSize: '11px' }}
-                                    >
-                                      + Create Task
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setSelectedProjectForNote(project);
-                                        setShowNoteModal(true);
-                                      }}
-                                      style={{ ...primBtn, backgroundColor: '#4f46e5', padding: '6px 12px', fontSize: '11px' }}
-                                    >
-                                      Update Note
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setSprintIdToUpdate(null);
-                                        setSprintName('');
-                                        setSprintStartDate('');
-                                        setSprintEndDate('');
-                                        setSelectedProjectForSprint(project);
-                                        setShowSprintModal(true);
-                                      }}
-                                      style={{ ...primBtn, backgroundColor: '#0891b2', padding: '6px 12px', fontSize: '11px' }}
-                                    >
-                                      Add Sprint
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <span style={{ color: '#94a3b8', fontSize: '12px' }}>Waiting Approval</span>
-                                )}
-                              </td>
-                            </tr>
-                            {expandedProjectId === project.id && (
-                              <tr>
-                                <td colSpan="5" style={{ padding: '20px', backgroundColor: '#f8fafc' }}>
-                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                                    <div style={innerCardStyle}>
-                                      <h5 style={innerTitleStyle}> Project Team</h5>
-                                      <div style={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        background: 'linear-gradient(135deg, #1B3A6B, #2563EB)',
-                                        color: '#fff',
-                                        padding: '12px 18px',
-                                        borderRadius: '10px',
-                                        marginBottom: '15px',
-                                        boxShadow: '0 4px 12px rgba(37,99,235,0.15)'
-                                      }}>
-                                        <div>
-                                          <div style={{ fontSize: '10px', textTransform: 'uppercase', opacity: 0.8, fontWeight: '800', letterSpacing: '0.5px' }}>Project FTE</div>
-                                          <div style={{ fontSize: '18px', fontWeight: 'bold', marginTop: '2px' }}>
-                                            {(project.team_members || []).reduce((sum, m) => sum + parseFloat(m.fte || 0), 0).toFixed(2)} FTE
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <div style={{ fontSize: '10px', textTransform: 'uppercase', opacity: 0.8, fontWeight: '800', letterSpacing: '0.5px' }}>Team Capacity</div>
-                                          <div style={{ fontSize: '18px', fontWeight: 'bold', marginTop: '2px' }}>
-                                            {project.team_members?.length || 0} Members Allocated
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <table style={miniTableStyle}>
-                                        <thead><tr style={miniTheadStyle}><th style={miniThStyle}>Member</th><th style={miniThStyle}>Role</th><th style={miniThStyle}>FTE</th><th style={miniThStyle}>Tasks</th></tr></thead>
-                                        <tbody>
-                                          {project.team_members?.map((m, idx) => (
-                                            <tr key={idx} style={miniTrStyle}><td style={miniTdStyle}>{m.username}</td><td style={miniTdStyle}>{m.role}</td><td style={miniTdStyle}>{m.fte}</td><td style={miniTdStyle}><span style={{background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold'}}>{m.task_count || 0}</span></td></tr>
-                                          )) || <tr><td colSpan="4">No members</td></tr>}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                    <div style={innerCardStyle}>
-                                      <h5 style={innerTitleStyle}> Sprint Timeline</h5>
-                                      <table style={miniTableStyle}>
-                                        <thead><tr style={miniTheadStyle}><th style={miniThStyle}>Sprint</th><th style={miniThStyle}>Duration</th><th style={miniThStyle}>Status</th></tr></thead>
-                                        <tbody>
-                                          {project.sprints?.map((s, idx) => {
-                                            const sColor = getStatusColor(s.end_date);
-                                            let statusBadge = null;
-                                            if (s.status === 'Pending Approval') {
-                                              statusBadge = <span style={{ backgroundColor: '#fef3c7', color: '#b45309', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>Pending Approval</span>;
-                                            } else if (s.status === 'Returned') {
-                                              statusBadge = <span style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>Returned</span>;
-                                            } else {
-                                              statusBadge = <span style={{ backgroundColor: sColor === '#ef4444' ? '#fee2e2' : '#DCFCE7', color: sColor, padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>{sColor === '#ef4444' ? 'Overdue' : 'On Track'}</span>;
-                                            }
-                                            return (
-                                              <tr key={idx} style={miniTrStyle}>
-                                                <td style={miniTdStyle}>{s.name}</td>
-                                                <td style={miniTdStyle}>{formatDate(s.start_date)} to {formatDate(s.end_date)}</td>
-                                                <td style={miniTdStyle}>
-                                                  {statusBadge}
-                                                  {s.status === 'Returned' && (
-                                                    <div style={{ marginTop: '5px' }}>
-                                                      {s.return_note && <div style={{ fontSize: '11px', color: '#b91c1c', marginBottom: '4px' }}><strong>Note:</strong> {s.return_note}</div>}
-                                                      <button 
-                                                        onClick={() => {
-                                                          setSprintIdToUpdate(s.id);
-                                                          setSprintName(s.name);
-                                                          setSprintStartDate(s.start_date);
-                                                          setSprintEndDate(s.end_date);
-                                                          setSelectedProjectForSprint(project);
-                                                          setShowSprintModal(true);
-                                                        }}
-                                                        style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '4px', fontSize: '10px', cursor: 'pointer' }}
-                                                      >
-                                                        Update Sprint
-                                                      </button>
-                                                    </div>
-                                                  )}
-                                                </td>
-                                              </tr>
-                                            );
-                                          }) || <tr><td colSpan="3">No sprints</td></tr>}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <PMOngoingWorkspace
+                    myProjects={myProjects}
+                    expandedProjectId={expandedProjectId}
+                    onToggleExpand={toggleRow}
+                    onCreateTask={(project) => {
+                      setIsStartWorkingWorkflow(false);
+                      setTasksList([{ title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' }]);
+                      setActiveProjectForTask(project);
+                      setShowTaskModal(true);
+                    }}
+                    onUpdateNote={(project) => {
+                      setSelectedProjectForNote(project);
+                      setShowNoteModal(true);
+                    }}
+                    onAddSprint={(project) => {
+                      setSprintIdToUpdate(null);
+                      setSprintName('');
+                      setSprintStartDate('');
+                      setSprintEndDate('');
+                      setSelectedProjectForSprint(project);
+                      setShowSprintModal(true);
+                    }}
+                    onTriggerUpdateSprint={(sprint, project) => {
+                      setSprintIdToUpdate(sprint.id);
+                      setSprintName(sprint.name);
+                      setSprintStartDate(sprint.start_date);
+                      setSprintEndDate(sprint.end_date);
+                      setSelectedProjectForSprint(project);
+                      setShowSprintModal(true);
+                    }}
+                  />
                 </>
               )}
               {activeTab === 'assignments' && (
-                <>
-
-                  {/* --- Horizontal Stats Cards Section --- */}
-                  <div style={{
-                      display: 'flex',
-                      gap: '20px',
-                      marginBottom: '30px',
-                      marginTop: '20px'
-                  }}>
-                      {/* Card 1 */}
-                      <div style={{
-                          flex: 1,
-                          backgroundColor: '#fff',
-                          padding: '20px',
-                          borderRadius: '8px',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                          borderLeft: '5px solid #4e73df'
-                      }}>
-                          <h6 style={{ color: '#858796', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '10px' }}>Total Assigned</h6>
-                          <h3 style={{ margin: 0, fontWeight: 'bold', color: '#4e73df' }}>{stats.total_assigned || 0}</h3>
-                      </div>
-
-                      {/* Card 2 */}
-                      <div style={{
-                          flex: 1,
-                          backgroundColor: '#fff',
-                          padding: '20px',
-                          borderRadius: '8px',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                          borderLeft: '5px solid #f6c23e'
-                      }}>
-                          <h6 style={{ color: '#858796', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '10px' }}>Pending Plans</h6>
-                          <h3 style={{ margin: 0, fontWeight: 'bold', color: '#f6c23e' }}>{stats.pending_plans || 0}</h3>
-                      </div>
-
-                      {/* Card 3 */}
-                      <div style={{
-                          flex: 1,
-                          backgroundColor: '#fff',
-                          padding: '20px',
-                          borderRadius: '8px',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                          borderLeft: '5px solid #1cc88a'
-                      }}>
-                          <h6 style={{ color: '#858796', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '10px' }}>Overall Progress</h6>
-                          <h3 style={{ margin: 0, fontWeight: 'bold', color: '#1cc88a' }}>{stats.avg_completion || 0}%</h3>
-                      </div>
-
-                      {/* Card 4 - Your FTE Load */}
-                      {(() => {
-                        const myRes = resources.find(r => r.username === username);
-                        const myFteVal = myRes ? myRes.assigned_fte : 0;
-                        const myStatus = myRes ? myRes.workload_status : 'Free';
-                        const myColor = myRes ? myRes.workload_color : 'Green';
-                        return (
-                          <div style={{
-                              flex: 1,
-                              backgroundColor: '#fff',
-                              padding: '20px',
-                              borderRadius: '8px',
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                              borderLeft: `5px solid ${myColor === 'Red' ? '#EF4444' : myColor === 'Yellow' ? '#F59E0B' : '#10B981'}`
-                          }}>
-                              <h6 style={{ color: '#858796', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '10px' }}>Your FTE Load</h6>
-                              <h3 style={{ margin: 0, fontWeight: 'bold', color: myColor === 'Red' ? '#EF4444' : myColor === 'Yellow' ? '#D97706' : '#10B981' }}>
-                                  {myFteVal.toFixed(2)} FTE <span style={{ fontSize: '11px', fontWeight: 'bold', marginLeft: '5px', color: '#64748B' }}>({myStatus.toUpperCase()})</span>
-                              </h3>
-                          </div>
-                        );
-                      })()}
-                  </div>
-                  {/* --- End of Section --- */}
-
-                  <h3 style={sectionTitle}>Assigned Programs</h3>
-                  <div style={tableContainer}>
-                    <table style={tableStyle}>
-                      <thead style={theadStyle}><tr><th style={thStyle}>PROGRAM NAME</th><th style={thStyle}>TIMELINE</th><th style={thStyle}>ASSIGNED BY</th><th style={thStyle}>ACTION</th></tr></thead>
-                      <tbody>
-                        {assignedPrograms.map((pgm) => {
-                          const isNew = pgm.status_label === 'Build Plan';
-                          const isReturned = pgm.status_label === 'Returned';
-                          return (
-                            <tr
-                              key={pgm.id}
-                              style={{
-                                ...trStyle,
-                                backgroundColor: isNew ? '#F0F9FF' : isReturned ? '#FEF2F2' : '#fff',
-                                borderLeft: isNew ? '4px solid #3B82F6' : isReturned ? '4px solid #EF4444' : '4px solid transparent'
-                              }}
-                            >
-                              <td style={tdStyle}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <b style={{ color: '#1E293B' }}>{pgm.name}</b>
-                                  {isNew && (
-                                    <span style={{
-                                      background: 'linear-gradient(135deg, #3B82F6, #60A5FA)',
-                                      color: '#fff',
-                                      fontSize: '9px',
-                                      padding: '2px 8px',
-                                      borderRadius: '12px',
-                                      fontWeight: '800',
-                                      textTransform: 'uppercase',
-                                      letterSpacing: '0.5px',
-                                      boxShadow: '0 2px 4px rgba(59,130,246,0.3)'
-                                    }}>
-                                      New Assignment
-                                    </span>
-                                  )}
-                                  {isReturned && (
-                                    <span style={{
-                                      background: 'linear-gradient(135deg, #EF4444, #F87171)',
-                                      color: '#fff',
-                                      fontSize: '9px',
-                                      padding: '2px 8px',
-                                      borderRadius: '12px',
-                                      fontWeight: '800',
-                                      textTransform: 'uppercase',
-                                      letterSpacing: '0.5px',
-                                      boxShadow: '0 2px 4px rgba(239,68,68,0.3)'
-                                    }}>
-                                      Returned Plan
-                                    </span>
-                                  )}
-                                </div>
-                                {pgm.description && <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', maxWidth: '350px', lineHeight: '1.4' }}>{pgm.description}</div>}
-                                {pgm.document && (
-                                    <div style={{ marginTop: '8px' }}>
-                                        <a href={pgm.document} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#2563EB', textDecoration: 'none', background: '#EFF6FF', padding: '4px 10px', borderRadius: '6px', border: '1px solid #BFDBFE', fontWeight: 'bold' }}>
-                                            📎 View Reference Document
-                                        </a>
-                                    </div>
-                                )}
-                              </td>
-                              <td style={tdStyle}>{formatDate(pgm.start_date)} to {formatDate(pgm.end_date)}</td>
-                              <td style={tdStyle}>{pgm.manager_name || 'System Assigned'}</td>
-                              <td style={tdStyle}>
-                                <button
-                                    onClick={() => {
-                                        if (pgm.status_label === 'Approved') {
-                                            handleStartWorking(pgm);
-                                        } else {
-                                            handleBuildPlan(pgm);
-                                        }
-                                    }}
-                                    style={{
-                                        ...primBtn,
-                                        backgroundColor: pgm.status_label === 'Approved' ? '#10b981' : '#2563eb',
-                                        opacity: pgm.status_label === 'Build Plan' || pgm.status_label === 'Rejected' || pgm.status_label === 'Returned' || pgm.status_label === 'Approved' ? 1 : 0.7,
-                                        cursor: pgm.status_label === 'Build Plan' || pgm.status_label === 'Rejected' || pgm.status_label === 'Returned' || pgm.status_label === 'Approved' ? 'pointer' : 'not-allowed'
-                                    }}
-                                    disabled={pgm.status_label === 'Waiting' || pgm.status_label === 'In Progress' || pgm.status_label === 'Updated Plan Sent'}
-                                >
-                                    {pgm.status_label === 'Build Plan' ? '+ Build Plan' :
-                                     pgm.status_label === 'Waiting' ? ' Waiting Approval' :
-                                     pgm.status_label === 'Updated Plan Sent' ? ' Updated Plan Sent' :
-                                     pgm.status_label === 'Approved' ? ' Start Working' :
-                                     pgm.status_label === 'In Progress' ? ' In Progress' :
-                                     pgm.status_label === 'Rejected' ? ' Rejected (Re-build)' :
-                                     pgm.status_label === 'Returned' ? ' Returned (Update Plan)' : pgm.status_label}
-                                </button>
-                                {pgm.status_label === 'Returned' && pgm.return_note && (
-                                    <div style={{ marginTop: '5px', fontSize: '11px', color: '#991b1b', background: '#fee2e2', padding: '6px', borderRadius: '4px', border: '1px solid #fca5a5' }}>
-                                        <strong>Note from Manager:</strong> {pgm.return_note}
-                                    </div>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
+                <PMOverview
+                  assignedPrograms={assignedPrograms}
+                  stats={stats}
+                  resources={resources}
+                  username={username}
+                  onBuildPlan={(pgm) => {
+                    if (pgm.status_label === 'Approved') {
+                      handleStartWorking(pgm);
+                    } else {
+                      handleBuildPlan(pgm);
+                    }
+                  }}
+                  onLiveTrack={handleLiveTrack}
+                />
               )}
               {activeTab === 'working_programs' && (
                 <>
@@ -1183,131 +840,47 @@ const lastStatItem = {
                             <td style={tdStyle}>
                               {(() => {
                                 const pct = pgm.completion_percentage || 0;
-                                let label = "IN PROGRESS";
-                                let color = "#1e40af";
-                                let bg = "#dbeafe";
+                                  let label = "IN PROGRESS";
+                                  let color = "#1e40af";
+                                  let bg = "#dbeafe";
 
-                                if (pct === 0) { label = "NOT STARTED"; color = "#64748b"; bg = "#f1f5f9"; }
-                                else if (pct === 100) { label = "COMPLETED"; color = "#166534"; bg = "#dcfce7"; }
-                                else if (pct > 90) { label = "ALMOST DONE"; color = "#854d0e"; bg = "#fef9c3"; }
-                                else { label = `${pct}% COMPLETE`; }
+                                  if (pct === 0) { label = "NOT STARTED"; color = "#64748b"; bg = "#f1f5f9"; }
+                                  else if (pct === 100) { label = "COMPLETED"; color = "#166534"; bg = "#dcfce7"; }
+                                  else if (pct > 90) { label = "ALMOST DONE"; color = "#854d0e"; bg = "#fef9c3"; }
+                                  else { label = `${pct}% COMPLETE`; }
 
-                                return (
-                                  <span style={{ backgroundColor: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
-                                    {label}
-                                  </span>
-                                );
-                              })()}
-                            </td>
-                            <td style={tdStyle}><button onClick={() => handleLiveTrack(pgm.id)} style={{ ...primBtn, padding: '6px 12px', fontSize: '12px', backgroundColor: '#8b5cf6' }}>Live Track </button></td>
-                          </tr>
-                        )) : (<tr><td colSpan="4" style={{ textAlign: 'center', padding: '20px' }}>No programs in execution.</td></tr>)}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </>
-      {/* REDESIGNED PROJECT SETUP (BUILD PLAN) MODAL */}
-      {showProjectForm && (
-        <div style={modalOverlayStyle}>
-          <div style={{ ...modalContentStyle, width: '800px', padding: '0', borderRadius: '16px', overflow: 'hidden', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            {/* Header */}
-            <div style={{ background: '#1B3A6B', padding: '20px 30px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>Setup Project: {selectedProgram?.name}</h3>
-              <button onClick={() => setShowProjectForm(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' }}>✕</button>
-            </div>
-            
-            <form onSubmit={handleSubmitPlan} style={{ padding: '30px', maxHeight: '80vh', overflowY: 'auto' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px' }}>
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}> Project Name</label>
-                  <input style={{...inp, padding: '12px', borderRadius: '8px'}} required value={projectData.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="e.g., Marketing Campaign Q3" />
-                </div>
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}> Description</label>
-                  <textarea style={{ ...inp, minHeight: '80px', padding: '12px', borderRadius: '8px', resize: 'none' }} value={projectData.description} onChange={(e) => handleInputChange('description', e.target.value)} placeholder="Briefly describe the project objectives..." />
-                </div>
-                <div>
-                    <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}> Start Date</label>
-                    <input type="date" style={{...inp, padding: '12px', borderRadius: '8px'}} required 
-                        min={selectedProgram?.start_date} max={selectedProgram?.end_date}
-                        value={projectData.start_date} onChange={(e) => handleInputChange('start_date', e.target.value)} 
-                    />
-                    <small style={{color: '#64748b', fontSize: '10px'}}>Program Start: {selectedProgram?.start_date}</small>
-                </div>
-                <div>
-                    <label style={{ ...lbl, fontSize: '13px', color: '#1B3A6B' }}> End Date</label>
-                    <input type="date" style={{...inp, padding: '12px', borderRadius: '8px'}} required 
-                        min={selectedProgram?.start_date} max={selectedProgram?.end_date}
-                        value={projectData.end_date} onChange={(e) => handleInputChange('end_date', e.target.value)} 
-                    />
-                    <small style={{color: '#64748b', fontSize: '10px'}}>Program End: {selectedProgram?.end_date}</small>
-                </div>
-              </div>
-
-              {/* Resource Allocation Section */}
-              <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' }}>
-                <h4 style={{ color: '#1B3A6B', marginTop: 0, fontSize: '15px', marginBottom: '15px' }}> Resource Allocation</h4>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr>
-                        <th style={{...miniThStyle, padding: '10px', textAlign: 'left'}}>Member</th>
-                        <th style={{...miniThStyle, padding: '10px', textAlign: 'left'}}>Role</th>
-                        <th style={{...miniThStyle, padding: '10px', textAlign: 'left'}}>FTE</th>
-                        <th style={{width: '40px'}}></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {projectData.team.map((m, idx) => (
-                        <tr key={idx}>
-                          <td style={{padding: '5px'}}>
-                            <select style={{...inp, margin: 0, padding: '8px'}} value={m.userId} onChange={(e) => handleMemberChange(idx, 'userId', e.target.value)}>
-                              <option value="">Select Member</option>
-                              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.username}</option>)}
-                            </select>
-                          </td>
-                          <td style={{padding: '5px'}}><input style={{...inp, margin: 0, padding: '8px'}} value={m.role} onChange={(e) => handleMemberChange(idx, 'role', e.target.value)} placeholder="e.g. Lead" /></td>
-                          <td style={{padding: '5px'}}><input type="number" step="0.1" style={{...inp, margin: 0, padding: '8px'}} value={m.fte} onChange={(e) => handleMemberChange(idx, 'fte', e.target.value)} /></td>
-                          <td style={{padding: '5px', textAlign: 'center'}}><button type="button" onClick={() => removeMemberRow(idx)} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', fontSize: '16px' }}>✕</button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <button type="button" onClick={addMemberRow} style={{ ...secBtn, marginTop: '12px', background: '#fff', border: '1px solid #cbd5e1', padding: '8px 16px', fontSize: '12px' }}>+ Add Team Member</button>
-              </div>
-
-              {/* Sprints Section */}
-              <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' }}>
-                <h4 style={{ color: '#1B3A6B', marginTop: 0, fontSize: '15px', marginBottom: '15px' }}> Sprints</h4>
-                {projectData.sprints.map((s, idx) => (
-                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 40px', gap: '10px', marginBottom: '12px', alignItems: 'center' }}>
-                    <input style={{...inp, margin: 0, padding: '8px'}} value={s.name} onChange={(e) => handleSprintChange(idx, 'name', e.target.value)} placeholder="Sprint Name" />
-                    <input type="date" style={{...inp, margin: 0, padding: '8px'}} 
-                        min={projectData.start_date} max={projectData.end_date}
-                        value={s.start_date} onChange={(e) => handleSprintChange(idx, 'start_date', e.target.value)} 
-                    />
-                    <input type="date" style={{...inp, margin: 0, padding: '8px'}} 
-                        min={projectData.start_date} max={projectData.end_date}
-                        value={s.end_date} onChange={(e) => handleSprintChange(idx, 'end_date', e.target.value)} 
-                    />
-                    <button type="button" onClick={() => removeSprintRow(idx)} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', fontSize: '16px' }}>✕</button>
-                  </div>
-                ))}
-                <button type="button" onClick={addSprintRow} style={{ ...secBtn, marginTop: '12px', background: '#fff', border: '1px solid #cbd5e1', padding: '8px 16px', fontSize: '12px' }}>+ Add Sprint</button>
-              </div>
-
-              {/* Submit Actions */}
-              <div style={{ borderTop: '1px solid #f1f5f9', display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px', paddingTop: '20px' }}>
-                <button type="button" onClick={() => setShowProjectForm(false)} style={{ ...secBtn, padding: '10px 20px', fontWeight: '600', borderRadius: '8px' }}>Cancel</button>
-                <button type="submit" style={{ ...primBtn, padding: '10px 30px', background: '#10B981', fontWeight: '600', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2)' }}>Submit Project Plan</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                                  return (
+                                    <span style={{ backgroundColor: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
+                                      {label}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                              <td style={tdStyle}><button onClick={() => handleLiveTrack(pgm.id)} style={{ ...primBtn, padding: '6px 12px', fontSize: '12px', backgroundColor: '#8b5cf6' }}>Live Track </button></td>
+                            </tr>
+                          )) : (<tr><td colSpan="4" style={{ textAlign: 'center', padding: '20px' }}>No programs in execution.</td></tr>)}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </>
+        {showProjectForm && (
+          <PMProjectPlanForm
+            selectedProgram={selectedProgram}
+            projectData={projectData}
+            employees={employees}
+            onInputChange={handleInputChange}
+            onMemberChange={handleMemberChange}
+            addMemberRow={addMemberRow}
+            removeMemberRow={removeMemberRow}
+            onSprintChange={handleSprintChange}
+            addSprintRow={addSprintRow}
+            removeSprintRow={removeSprintRow}
+            onSubmitPlan={handleSubmitPlan}
+            onClose={() => setShowProjectForm(false)}
+          />
+        )}
         </div>
       </div>
 

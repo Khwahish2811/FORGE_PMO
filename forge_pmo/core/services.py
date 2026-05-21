@@ -893,3 +893,456 @@ class TeamService:
             })
             
         return resources_list
+
+
+# --- SERVICE LAYER EXTENSIONS FOR CLEAN ARCHITECTURE & HIGH LOGGING DENSITY ---
+
+from django.db.models import Q
+
+class ProgramServiceExtensions:
+    @staticmethod
+    def get_assigned_programs_for_pm(username, request):
+        logger.info(f"ProgramServiceExtensions: Fetching assigned programs for PM '{username}'")
+        programs = Program.objects.filter(
+            project_manager_assigned__username=username
+        ).filter(
+            Q(status__iexact='Approved') |
+            Q(status__iexact='Active') |
+            Q(status__iexact='In Progress')
+        )
+        logger.debug(f"ProgramServiceExtensions: Found {programs.count()} assigned programs in database")
+        
+        data = []
+        for p in programs:
+            logger.debug(f"ProgramServiceExtensions: Inspecting program ID {p.id} ('{p.name}')")
+            projects_query = Project.objects.filter(program_id=p.id).order_by('-id')
+            project = projects_query.first()
+            project_count = projects_query.count()
+
+            status_label = project.status if project else "Build Plan"
+            if status_label == 'Pending':
+                if project_count > 1:
+                    status_label = "Updated Plan Sent"
+                else:
+                    status_label = "Waiting"
+
+            logger.debug(f"ProgramServiceExtensions: Program {p.id} status mapped as '{status_label}'")
+            proj_id = project.id if project else None
+
+            data.append({
+                'id': p.id,
+                'name': p.name,
+                'description': p.description,
+                'document': request.build_absolute_uri(p.document.url) if p.document else None,
+                'manager_name': p.manager_name,
+                'status': p.status,
+                'status_label': status_label,
+                'start_date': p.start_date,
+                'end_date': p.end_date,
+                'project_id': proj_id,
+                'return_note': project.return_note if project else None
+            })
+        logger.info(f"ProgramServiceExtensions: Finished mapping {len(data)} assigned programs for PM '{username}'")
+        return data
+
+    @staticmethod
+    def get_working_programs_for_pm(username):
+        logger.info(f"ProgramServiceExtensions: Fetching working programs for PM '{username}'")
+        programs = Program.objects.filter(
+            project_manager_assigned__username=username
+        ).filter(
+            Q(status__iexact='In Progress') |
+            Q(status__iexact='Approved') |
+            Q(status__iexact='Active')
+        ).distinct()
+        logger.debug(f"ProgramServiceExtensions: Found {programs.count()} distinct active programs")
+        
+        working_programs_data = []
+        for prog in programs:
+            logger.debug(f"ProgramServiceExtensions: Extracting analytics metrics for program ID {prog.id} ('{prog.name}')")
+            project = Project.objects.filter(program=prog).first()
+            pm_name = project.created_by.username if project else username
+            
+            tasks = Task.objects.filter(project=project) if project else []
+            total_tasks = tasks.count() if project else 0
+            done_tasks = tasks.filter(status='Done').count() if project else 0
+            completion = int((done_tasks / total_tasks) * 100) if total_tasks > 0 else 0
+            
+            logger.debug(f"ProgramServiceExtensions: Program {prog.id} completion percentage: {completion}% ({done_tasks}/{total_tasks} tasks done)")
+            working_programs_data.append({
+                "id": prog.id,
+                "name": prog.name,
+                "start_date": str(prog.start_date) if prog.start_date else "",
+                "end_date": str(prog.end_date) if prog.end_date else "",
+                "pm_name": pm_name,
+                "status": prog.status,
+                "completion_percentage": completion
+            })
+        logger.info(f"ProgramServiceExtensions: Recompiled {len(working_programs_data)} active working programs")
+        return working_programs_data
+
+    @staticmethod
+    def get_tracker_data(program_id):
+        logger.info(f"ProgramServiceExtensions: Assembling comprehensive program tracker metrics for program ID {program_id}")
+        program = get_object_or_404(Program, id=program_id)
+        
+        tasks = Task.objects.filter(project__program_id=program_id).select_related('assigned_to', 'sprint')
+        total_tasks = tasks.count()
+        logger.debug(f"ProgramServiceExtensions: Detected total task count of {total_tasks}")
+        
+        recent_logs = []
+        for task in tasks.order_by('-id')[:10]:
+            recent_logs.append({
+                "user": task.assigned_to.username if task.assigned_to else "Unassigned",
+                "sprint": task.sprint.name if task.sprint else "No Sprint",
+                "task_name": task.title,
+                "due_date": str(task.due_date) if task.due_date else "No Date",
+                "status": task.status
+            })
+        logger.debug(f"ProgramServiceExtensions: Processed {len(recent_logs)} recent activities")
+
+        velocity_data = []
+        unique_sprints = Sprint.objects.filter(project__program_id=program_id).order_by('start_date').distinct()
+        logger.debug(f"ProgramServiceExtensions: Loaded {unique_sprints.count()} unique sprints")
+        
+        for s in unique_sprints:
+            s_tasks = tasks.filter(sprint=s)
+            total = s_tasks.count()
+            done = s_tasks.filter(status__icontains='Done').count()
+            progress = round((done / total * 100), 1) if total > 0 else 0
+            logger.debug(f"ProgramServiceExtensions: Sprint '{s.name}' task ratio: {done}/{total} ({progress}%)")
+            velocity_data.append({"name": s.name, "completion": progress})
+
+        completed_tasks = tasks.filter(status__icontains='Done').count()
+        pending_tasks = tasks.filter(status__icontains='In Progress').count()
+        todo_tasks = total_tasks - completed_tasks - pending_tasks
+        
+        task_distribution = [
+            {"name": "Done", "value": completed_tasks},
+            {"name": "Doing", "value": pending_tasks},
+            {"name": "Todo", "value": todo_tasks}
+        ]
+
+        gantt_data = []
+        for s in unique_sprints:
+            s_tasks = tasks.filter(sprint=s)
+            s_total = s_tasks.count()
+            s_done = s_tasks.filter(status__icontains='Done').count()
+            s_prog = (s_done / s_total * 100) if s_total > 0 else 0
+            
+            gantt_data.append({
+                "id": f"sprint_{s.id}",
+                "name": s.name,
+                "start": str(s.start_date) if s.start_date else str(program.start_date),
+                "end": str(s.end_date) if s.end_date else str(program.end_date),
+                "progress": s_prog,
+                "dependencies": []
+            })
+        logger.debug(f"ProgramServiceExtensions: Formatted Gantt charts data for {len(gantt_data)} sprints")
+
+        overall_progress = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
+
+        projects = Project.objects.filter(program=program)
+        projects_breakdown = []
+        for p in projects:
+            logger.debug(f"ProgramServiceExtensions: Evaluating breakdown details for project ID {p.id}")
+            p_tasks = tasks.filter(project=p)
+            p_total = p_tasks.count()
+            p_done = p_tasks.filter(status__icontains='Done').count()
+            p_progress = round((p_done / p_total * 100), 1) if p_total > 0 else 0
+
+            last_log = DailyEffortLog.objects.filter(task__project=p).order_by('-id').first()
+            last_member = "None"
+            last_task = "No active task yet"
+
+            if last_log:
+                last_member = last_log.user.username
+                last_task = last_log.task.title
+            else:
+                last_t = p_tasks.order_by('-id').first()
+                if last_t:
+                    last_member = last_t.assigned_to.username if last_t.assigned_to else "Unassigned"
+                    last_task = last_t.title
+
+            active_s = Sprint.objects.filter(project=p, status='In Progress').first()
+            if not active_s:
+                active_s = Sprint.objects.filter(project=p).order_by('-end_date').first()
+
+            sprint_name = active_s.name if active_s else "No Active Sprint"
+            sprint_due = str(active_s.end_date) if active_s and active_s.end_date else "N/A"
+
+            total_hours = p_tasks.aggregate(total=Sum('hours_logged'))['total'] or 0.0
+
+            projects_breakdown.append({
+                "id": p.id,
+                "name": p.name,
+                "status": p.status,
+                "progress": p_progress,
+                "total_tasks": p_total,
+                "completed_tasks": p_done,
+                "last_active_member": last_member,
+                "last_active_task": last_task,
+                "sprint_name": sprint_name,
+                "sprint_due_date": sprint_due,
+                "total_hours": round(float(total_hours), 1)
+            })
+            
+        logger.info(f"ProgramServiceExtensions: Tracker summary reassembled for '{program.name}'")
+        return {
+            "program_name": program.name,
+            "pm_name": getattr(program.project_manager_assigned, 'username', "Not Assigned"),
+            "total_tasks": total_tasks,
+            "completed_tasks": completed_tasks,
+            "pending_tasks": pending_tasks,
+            "overall_progress": overall_progress,
+            "team_count": tasks.values('assigned_to').distinct().count(),
+            "velocity_data": velocity_data,
+            "task_distribution": task_distribution,
+            "gantt_data": gantt_data,
+            "recent_logs": recent_logs,
+            "projects_breakdown": projects_breakdown
+        }
+
+
+class ProjectServiceExtensions:
+    @staticmethod
+    def get_active_projects_by_user(username):
+        logger.info(f"ProjectServiceExtensions: Finding unique active projects built by user '{username}'")
+        projects = Project.objects.filter(created_by__username=username).select_related('program').order_by('-id')
+        
+        seen_programs = set()
+        latest_projects = []
+        for proj in projects:
+            if proj.program_id not in seen_programs:
+                logger.debug(f"ProjectServiceExtensions: Adding unique project plan ID {proj.id} for program {proj.program_id}")
+                latest_projects.append(proj)
+                seen_programs.add(proj.program_id)
+                
+        logger.info(f"ProjectServiceExtensions: Found {len(latest_projects)} unique active projects")
+        return latest_projects
+
+    @staticmethod
+    def get_pending_projects():
+        logger.info("ProjectServiceExtensions: Loading list of pending project approval plans")
+        projects = Project.objects.filter(status='Pending').select_related('program', 'created_by').order_by('-id')
+        
+        data = []
+        for p in projects:
+            logger.debug(f"ProjectServiceExtensions: Parsing allocations for project ID {p.id}")
+            team_members = TeamMember.objects.filter(project=p)
+            team_list = [{
+                "username": t.user.username if t.user else "Unknown",
+                "role": getattr(t, 'role', 'Member'),
+                "fte": t.fte_score
+            } for t in team_members]
+
+            sprints = Sprint.objects.filter(project=p)
+            sprint_list = [{
+                "name": s.name,
+                "start_date": str(s.start_date),
+                "end_date": str(s.end_date)
+            } for s in sprints]
+
+            data.append({
+                "id": p.id,
+                "project_name": p.name,
+                "program_name": p.program.name if p.program else "No Program",
+                "pm_name": p.created_by.username if p.created_by else "System",
+                "start_date": str(p.start_date),
+                "end_date": str(p.end_date),
+                "description": p.description or "No description provided",
+                "team_members": team_list,
+                "sprints": sprint_list
+            })
+            
+        logger.info(f"ProjectServiceExtensions: Successfully aggregated {len(data)} pending plans")
+        return data
+
+    @staticmethod
+    def approve_project_plan(project_id, decision, return_note):
+        logger.info(f"ProjectServiceExtensions: Reviewing project ID {project_id} (Decision: {decision})")
+        project = Project.objects.get(id=project_id)
+        
+        if decision == 'approve':
+            project.status = 'Approved'
+        elif decision == 'return':
+            project.status = 'Returned'
+            project.return_note = return_note
+        else:
+            project.status = 'Rejected'
+            
+        project.save()
+        logger.info(f"ProjectServiceExtensions: Project {project_id} transitioned successfully to '{project.status}'")
+
+        pm_user = project.program.project_manager_assigned or project.created_by
+        if pm_user:
+            logger.debug(f"ProjectServiceExtensions: Creating plan notification details for manager '{pm_user.username}'")
+            if decision == 'approve':
+                msg = f"PLAN_APPROVED: The project plan for program '{project.program.name}' has been APPROVED by the Program Manager."
+            elif decision == 'return':
+                msg = f"PLAN_RETURNED: The project plan for program '{project.program.name}' was returned for updates. Note: {return_note}"
+            else:
+                msg = f"PLAN_REJECTED: The project plan for program '{project.program.name}' was REJECTED by the Program Manager."
+                
+            Notification.objects.create(user=pm_user, message=msg)
+            logger.info("ProjectServiceExtensions: Notification dispatched successfully")
+            
+        return project
+
+
+class TaskServiceExtensions:
+    @staticmethod
+    def get_kanban_tasks_for_user(username):
+        logger.info(f"TaskServiceExtensions: Structuring Kanban tasks for assignee '{username}'")
+        tasks = Task.objects.filter(assigned_to__username=username)
+        logger.debug(f"TaskServiceExtensions: Found {tasks.count()} tasks assigned to '{username}'")
+        
+        task_data = []
+        for t in tasks:
+            proj = getattr(t, 'project', None)
+            prog = getattr(proj, 'program', None) if proj else None
+            pm = getattr(proj, 'created_by', None) if proj else None
+            spr = getattr(t, 'sprint', None)
+
+            task_data.append({
+                "id": t.id,
+                "task_title": t.title or "Untitled",
+                "status": t.status or "To Do",
+                "project_name": proj.name if proj else "No Project",
+                "program_name": prog.name if prog else "Standard",
+                "project_manager": pm.username if pm else "Not Assigned",
+                "sprint_name": spr.name if spr else "Unassigned",
+                "sprint_id": spr.id if spr else None,
+                "sprint_status": spr.status if spr else "Planned",
+                "sprint_deadline": spr.end_date.strftime('%Y-%m-%d') if (spr and spr.end_date) else "No Date",
+                "priority": t.priority or "Medium",
+                "hours_logged": str(t.hours_logged or 0.00),
+                "due_date": t.due_date.strftime('%Y-%m-%d') if t.due_date else "No Date",
+                "program_document": prog.document.url if (prog and prog.document) else None
+            })
+            
+        logger.info(f"TaskServiceExtensions: Kanban packaging complete. Items count: {len(task_data)}")
+        return task_data
+
+    @staticmethod
+    def get_manager_team_tasks(manager_username):
+        logger.info(f"TaskServiceExtensions: Compiling effort logs of team members managed by PM '{manager_username}'")
+        tasks = Task.objects.filter(project__created_by__username=manager_username).select_related('assigned_to', 'project')
+        
+        manager_data = [{
+            "task": t.title,
+            "assigned_to": t.assigned_to.username if t.assigned_to else "Unassigned",
+            "status": t.status,
+            "total_effort": t.hours_logged,
+            "due_date": str(t.due_date),
+            "project": t.project.name if t.project else "No Project"
+        } for t in tasks]
+        
+        logger.info(f"TaskServiceExtensions: Dispatched {len(manager_data)} workload effort logs")
+        return manager_data
+
+
+class TeamServiceExtensions:
+    @staticmethod
+    def get_tm_projects(username):
+        logger.info(f"TeamServiceExtensions: Querying team member project allocations for '{username}'")
+        my_assignments = TeamMember.objects.filter(user__username=username).select_related('project')
+        
+        assigned_projects = []
+        for assign in my_assignments:
+            if assign.project and assign.project.status == 'Active':
+                assigned_projects.append({
+                    "id": assign.project.id,
+                    "project_name": assign.project.name,
+                    "role": getattr(assign, 'role', 'Member'),
+                    "fte": assign.fte_score,
+                    "timeline": f"{assign.project.start_date} to {assign.project.end_date}"
+                })
+                
+        logger.info(f"TeamServiceExtensions: Formatted {len(assigned_projects)} allocations")
+        return assigned_projects
+
+
+class StatsServiceExtensions:
+    @staticmethod
+    def get_pm_dashboard_stats(username):
+        logger.info(f"StatsServiceExtensions: Calculating summary statistics for PM user '{username}'")
+        stats_data = {'total_assigned': 0, 'pending_plans': 0, 'avg_completion': 0}
+        
+        pm_user = User.objects.get(username=username)
+        assigned_programs = Program.objects.filter(project_manager_assigned=pm_user)
+        stats_data['total_assigned'] = assigned_programs.count()
+        logger.debug(f"StatsServiceExtensions: PM handles {stats_data['total_assigned']} programs")
+
+        assigned_pgm_ids = assigned_programs.values_list('id', flat=True)
+        programs_with_projects = Project.objects.filter(program_id__in=assigned_pgm_ids).values_list('program_id', flat=True)
+        stats_data['pending_plans'] = assigned_programs.exclude(id__in=programs_with_projects).count()
+        logger.debug(f"StatsServiceExtensions: Program plans remaining to compile: {stats_data['pending_plans']}")
+
+        pm_tasks = Task.objects.filter(project__created_by=pm_user)
+        total_t = pm_tasks.count()
+        if total_t > 0:
+            done_t = pm_tasks.filter(status__icontains='Done').count()
+            stats_data['avg_completion'] = round((done_t / total_t) * 100, 1)
+        logger.debug(f"StatsServiceExtensions: Task completion average: {stats_data['avg_completion']}%")
+        
+        logger.info("StatsServiceExtensions: Calculation successfully completed")
+        return stats_data
+
+
+class ProfileService:
+    @staticmethod
+    def get_user_profile(username):
+        logger.info(f"ProfileService: Retrieving bio metadata for user '{username}'")
+        user = User.objects.get(username=username)
+        profile, created = Profile.objects.get_or_create(user=user)
+        
+        logger.debug(f"ProfileService: Profile model loaded. Displaying: '{profile.get_role_display()}'")
+        return {
+            "username": user.username,
+            "email": user.email,
+            "role": profile.get_role_display(),
+            "bio": profile.bio or "No bio available.",
+            "phone": profile.phone or "Not provided"
+        }
+
+
+class NotificationServiceExtensions:
+    @staticmethod
+    def get_notifications(username):
+        logger.info(f"NotificationServiceExtensions: Fetching alerts count for recipient '{username}'")
+        notifications = Notification.objects.filter(user__username=username, is_read=False).order_by('-created_at')
+        
+        data = [{
+            "id": n.id,
+            "message": n.message,
+            "created_at": n.created_at.strftime("%Y-%m-%d %H:%M")
+        } for n in notifications]
+        
+        logger.info(f"NotificationServiceExtensions: Wrapped {len(data)} notifications")
+        return data
+
+
+class SprintServiceExtensions:
+    @staticmethod
+    def get_pending_additional_sprints():
+        logger.info("SprintServiceExtensions: Extracting sprint expansion requests pending PGM approval")
+        sprints = Sprint.objects.filter(status='Pending Approval').select_related('project', 'project__program', 'project__created_by')
+        
+        sprint_list = []
+        for s in sprints:
+            sprint_list.append({
+                "sprint_id": s.id,
+                "sprint_name": s.name,
+                "start_date": s.start_date.strftime('%Y-%m-%d') if s.start_date else "",
+                "end_date": s.end_date.strftime('%Y-%m-%d') if s.end_date else "",
+                "project_id": s.project.id,
+                "project_name": s.project.name,
+                "project_status": s.project.status,
+                "program_name": s.project.program.name if s.project.program else "No Program",
+                "pm_username": s.project.created_by.username if s.project.created_by else "PM"
+            })
+            
+        logger.info(f"SprintServiceExtensions: Loaded {len(sprint_list)} pending additional sprint allocations")
+        return sprint_list
+

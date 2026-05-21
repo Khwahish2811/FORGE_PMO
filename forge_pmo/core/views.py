@@ -135,52 +135,15 @@ def assign_project_manager(request):
 # --- 3. PM & TM DASHBOARD DATA ---
 @api_view(['GET'])
 def my_assigned_programs(request):
-    username = request.query_params.get('username')
-
-    # 1. Fetch programs assigned to the user with specific statuses
-
-    # pyrefly: ignore [missing-attribute]
-    programs = Program.objects.filter(
-        project_manager_assigned__username=username
-    ).filter(
-        # pyrefly: ignore [unsupported-operation]
-        Q(status__iexact='Approved') |
-        Q(status__iexact='Active') |
-        Q(status__iexact='In Progress')
-    )
-
-    data = []
-    for p in programs:
-        # 2. Check if a project exists for this program
-        # pyrefly: ignore [missing-attribute]
-        projects_query = Project.objects.filter(program_id=p.id).order_by('-id')
-        project = projects_query.first()
-        project_count = projects_query.count()
-
-        status_label = project.status if project else "Build Plan"
-        if status_label == 'Pending':
-            if project_count > 1:
-                status_label = "Updated Plan Sent"
-            else:
-                status_label = "Waiting"
-
-        proj_id = project.id if project else None
-
-        data.append({
-            'id': p.id,
-            'name': p.name,
-            'description': p.description,
-            'document': request.build_absolute_uri(p.document.url) if p.document else None,
-            'manager_name': p.manager_name,
-            'status': p.status,
-            'status_label': status_label,
-            'start_date': p.start_date,
-            'end_date': p.end_date,
-            'project_id': proj_id,
-            'return_note': project.return_note if project else None
-        })
-
-    return Response(data)
+    try:
+        username = request.query_params.get('username')
+        logger.info(f"views: my_assigned_programs called for user {username}")
+        from core.services import ProgramServiceExtensions
+        data = ProgramServiceExtensions.get_assigned_programs_for_pm(username, request)
+        return Response(data)
+    except Exception as e:
+        logger.error(f"views: ASSIGNED PROGRAMS ERROR: {str(e)}", exc_info=True)
+        return Response([], status=200)
 
 @api_view(['GET'])
 def get_active_projects(request):
@@ -188,21 +151,13 @@ def get_active_projects(request):
     if not username:
         return Response([], status=200)
     try:
-        # pyrefly: ignore [missing-attribute]
-        projects = Project.objects.filter(created_by__username=username).select_related('program').order_by('-id')
-        
-        # Keep only the latest project per program
-        seen_programs = set()
-        latest_projects = []
-        for proj in projects:
-            if proj.program_id not in seen_programs:
-                latest_projects.append(proj)
-                seen_programs.add(proj.program_id)
-                
+        logger.info(f"views: get_active_projects called for user {username}")
+        from core.services import ProjectServiceExtensions
+        latest_projects = ProjectServiceExtensions.get_active_projects_by_user(username)
         serializer = ProjectSerializer(latest_projects, many=True)
         return Response(serializer.data, status=200)
     except Exception as e:
-        logger.error(f"ACTIVE PROJECT ERROR: {str(e)}")
+        logger.error(f"views: ACTIVE PROJECT ERROR: {str(e)}", exc_info=True)
         return Response([], status=200)
 
 
@@ -243,40 +198,12 @@ def create_project_plan(request):
 @api_view(['GET'])
 def get_pending_projects(request):
     try:
-        # pyrefly: ignore [missing-attribute]
-        projects = Project.objects.filter(status='Pending').select_related('program', 'created_by').order_by('-id')
-        data = []
-        for p in projects:
-            # pyrefly: ignore [missing-attribute]
-            team_members = TeamMember.objects.filter(project=p)
-            team_list = [{
-                "username": t.user.username if t.user else "Unknown",
-                "role": getattr(t, 'role', 'Member'),
-                "fte": t.fte_score
-            } for t in team_members]
-
-            # pyrefly: ignore [missing-attribute]
-            sprints = Sprint.objects.filter(project=p)
-            sprint_list = [{
-                "name": s.name,
-                "start_date": str(s.start_date),
-                "end_date": str(s.end_date)
-            } for s in sprints]
-
-            data.append({
-                "id": p.id,
-                "project_name": p.name,
-                "program_name": p.program.name if p.program else "No Program",
-                "pm_name": p.created_by.username if p.created_by else "System",
-                "start_date": str(p.start_date),
-                "end_date": str(p.end_date),
-                "description": p.description or "No description provided",
-                "team_members": team_list,
-                "sprints": sprint_list
-            })
+        logger.info("views: get_pending_projects called")
+        from core.services import ProjectServiceExtensions
+        data = ProjectServiceExtensions.get_pending_projects()
         return Response(data, status=200)
     except Exception as e:
-        logger.error(f"PENDING PROJECTS ERROR: {str(e)}")
+        logger.error(f"views: PENDING PROJECTS ERROR: {str(e)}", exc_info=True)
         return Response([], status=200)
 
 
@@ -287,43 +214,16 @@ def approve_project_plan(request):
     return_note = request.data.get('return_note', '')
 
     try:
-        # pyrefly: ignore [missing-attribute]
-        project = Project.objects.get(id=project_id)
-
-        # Syncing with PM Dashboard labels
-        if decision == 'approve':
-            project.status = 'Approved'
-        elif decision == 'return':
-            project.status = 'Returned'
-            project.return_note = return_note
-        else:
-            project.status = 'Rejected'
-
-        project.save()
-        
-        # Notify the Project Manager
-        pm_user = project.program.project_manager_assigned or project.created_by
-        if pm_user:
-            if decision == 'approve':
-                Notification.objects.create(
-                    user=pm_user,
-                    message=f"PLAN_APPROVED: The project plan for program '{project.program.name}' has been APPROVED by the Program Manager."
-                )
-            elif decision == 'return':
-                Notification.objects.create(
-                    user=pm_user,
-                    message=f"PLAN_RETURNED: The project plan for program '{project.program.name}' was returned for updates. Note: {return_note}"
-                )
-            else:
-                Notification.objects.create(
-                    user=pm_user,
-                    message=f"PLAN_REJECTED: The project plan for program '{project.program.name}' was REJECTED by the Program Manager."
-                )
-
+        logger.info(f"views: approve_project_plan called for {project_id} decision {decision}")
+        from core.services import ProjectServiceExtensions
+        project = ProjectServiceExtensions.approve_project_plan(project_id, decision, return_note)
         return Response({"success": True, "message": f"Project is now {project.status}"})
-    # pyrefly: ignore [missing-attribute]
     except Project.DoesNotExist:
+        logger.error(f"views: Project {project_id} not found during review", exc_info=True)
         return Response({"error": "Project not found"}, status=404)
+    except Exception as e:
+        logger.error(f"views: APPROVE PLAN ERROR: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(['POST'])
@@ -344,20 +244,12 @@ def get_tm_projects(request):
     username = request.GET.get('username')
     if not username: return JsonResponse([], safe=False)
     try:
-        # pyrefly: ignore [missing-attribute]
-        my_assignments = TeamMember.objects.filter(user__username=username).select_related('project')
-        assigned_projects = []
-        for assign in my_assignments:
-            if assign.project and assign.project.status == 'Active':
-                assigned_projects.append({
-                    "id": assign.project.id,
-                    "project_name": assign.project.name,
-                    "role": getattr(assign, 'role', 'Member'),
-                    "fte": assign.fte_score,
-                    "timeline": f"{assign.project.start_date} to {assign.project.end_date}"
-                })
+        logger.info(f"views: get_tm_projects called for user {username}")
+        from core.services import TeamServiceExtensions
+        assigned_projects = TeamServiceExtensions.get_tm_projects(username)
         return JsonResponse(assigned_projects, safe=False)
     except Exception as e:
+        logger.error(f"views: TM PROJECTS ERROR: {str(e)}", exc_info=True)
         return JsonResponse([], safe=False)
 
 
@@ -475,19 +367,12 @@ def update_task_status_with_tracker(request):
 def get_manager_team_tasks(request):
     manager_username = request.query_params.get('username')
     try:
-        # pyrefly: ignore [missing-attribute]
-        tasks = Task.objects.filter(project__created_by__username=manager_username).select_related('assigned_to',
-                                                                                                   'project')
-        manager_data = [{
-            "task": t.title,
-            "assigned_to": t.assigned_to.username if t.assigned_to else "Unassigned",
-            "status": t.status,
-            "total_effort": t.hours_logged,
-            "due_date": str(t.due_date),
-            "project": t.project.name if t.project else "No Project"
-        } for t in tasks]
+        logger.info(f"views: get_manager_team_tasks called for PM {manager_username}")
+        from core.services import TaskServiceExtensions
+        manager_data = TaskServiceExtensions.get_manager_team_tasks(manager_username)
         return Response(manager_data)
     except Exception as e:
+        logger.error(f"views: GET MANAGER TEAM TASKS ERROR: {str(e)}", exc_info=True)
         return Response([], status=200)
 
 
@@ -532,209 +417,42 @@ def get_program_tracker_stats(request):
 def get_working_programs(request):
     username = request.query_params.get('username')
     try:
-
-        # pyrefly: ignore [missing-attribute]
-        programs = Program.objects.filter(
-            project_manager_assigned__username=username
-        ).filter(
-            # pyrefly: ignore [unsupported-operation]
-            Q(status__iexact='In Progress') |
-            Q(status__iexact='Approved') |
-            Q(status__iexact='Active')
-        ).distinct()
-
-        working_programs_data = []
-
-        for prog in programs:
-
-            # pyrefly: ignore [missing-attribute]
-            project = Project.objects.filter(program=prog).first()
-
-
-            pm_name = project.created_by.username if project else username
-
-            # Completion calculation
-            tasks = Task.objects.filter(project=project) if project else []
-            total_tasks = tasks.count() if project else 0
-            done_tasks = tasks.filter(status='Done').count() if project else 0
-            completion = int((done_tasks / total_tasks) * 100) if total_tasks > 0 else 0
-
-            working_programs_data.append({
-                "id": prog.id,
-                "name": prog.name,
-                "start_date": str(prog.start_date) if prog.start_date else "",
-                "end_date": str(prog.end_date) if prog.end_date else "",
-                "pm_name": pm_name,
-                "status": prog.status,
-                "completion_percentage": completion
-            })
-
+        logger.info(f"views: get_working_programs called for user {username}")
+        from core.services import ProgramServiceExtensions
+        working_programs_data = ProgramServiceExtensions.get_working_programs_for_pm(username)
         return Response(working_programs_data, status=200)
     except Exception as e:
-        logger.error(f"Error in get_working_programs: {str(e)}")
+        logger.error(f"views: Error in get_working_programs: {str(e)}", exc_info=True)
         return Response([], status=200)
 
 @api_view(['GET'])
 def program_tracker(request):
     program_id = request.query_params.get('program_id')
-    program = get_object_or_404(Program, id=program_id)
-    
-    # All tasks for this program
-    tasks = Task.objects.filter(project__program_id=program_id).select_related('assigned_to', 'sprint')
-    
-    # 1. Recent Logs
-    recent_logs = []
-    for task in tasks.order_by('-id')[:10]:
-        recent_logs.append({
-            "user": task.assigned_to.username if task.assigned_to else "Unassigned",
-            "sprint": task.sprint.name if task.sprint else "No Sprint",
-            "task_name": task.title,
-            "due_date": str(task.due_date) if task.due_date else "No Date",
-            "status": task.status
-        })
-
-    # 2. Velocity Data (Sprint Progress)
-    velocity_data = []
-    unique_sprints = Sprint.objects.filter(project__program_id=program_id).order_by('start_date').distinct()
-    for s in unique_sprints:
-        s_tasks = tasks.filter(sprint=s)
-        total = s_tasks.count()
-        done = s_tasks.filter(status__icontains='Done').count()
-        progress = round((done / total * 100), 1) if total > 0 else 0
-        velocity_data.append({"name": s.name, "completion": progress})
-
-    # 3. Task Distribution
-    total_tasks = tasks.count()
-    completed_tasks = tasks.filter(status__icontains='Done').count()
-    pending_tasks = tasks.filter(status__icontains='In Progress').count()
-    todo_tasks = total_tasks - completed_tasks - pending_tasks
-
-    task_distribution = [
-        {"name": "Done", "value": completed_tasks},
-        {"name": "Doing", "value": pending_tasks},
-        {"name": "Todo", "value": todo_tasks}
-    ]
-
-    # 4. Gantt Data
-    gantt_data = []
-    # Project-level bars or Task-level bars? Let's do Sprints as major milestones
-    for s in unique_sprints:
-        s_tasks = tasks.filter(sprint=s)
-        s_total = s_tasks.count()
-        s_done = s_tasks.filter(status__icontains='Done').count()
-        s_prog = (s_done / s_total * 100) if s_total > 0 else 0
-        
-        gantt_data.append({
-            "id": f"sprint_{s.id}",
-            "name": s.name,
-            "start": str(s.start_date) if s.start_date else str(program.start_date),
-            "end": str(s.end_date) if s.end_date else str(program.end_date),
-            "progress": s_prog,
-            "dependencies": []
-        })
-
-    overall_progress = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
-
-    # Projects Breakdown
-    projects = Project.objects.filter(program=program)
-    projects_breakdown = []
-    for p in projects:
-        p_tasks = tasks.filter(project=p)
-        p_total = p_tasks.count()
-        p_done = p_tasks.filter(status__icontains='Done').count()
-        p_progress = round((p_done / p_total * 100), 1) if p_total > 0 else 0
-
-        # Last active member and task
-        last_log = DailyEffortLog.objects.filter(task__project=p).order_by('-id').first()
-        last_member = "None"
-        last_task = "No active task yet"
-
-        if last_log:
-            last_member = last_log.user.username
-            last_task = last_log.task.title
-        else:
-            last_t = p_tasks.order_by('-id').first()
-            if last_t:
-                last_member = last_t.assigned_to.username if last_t.assigned_to else "Unassigned"
-                last_task = last_t.title
-
-        # Active sprint due date
-        active_s = Sprint.objects.filter(project=p, status='In Progress').first()
-        if not active_s:
-            active_s = Sprint.objects.filter(project=p).order_by('-end_date').first()
-
-        sprint_name = active_s.name if active_s else "No Active Sprint"
-        sprint_due = str(active_s.end_date) if active_s and active_s.end_date else "N/A"
-
-        # Total hours logged
-        total_hours = p_tasks.aggregate(total=Sum('hours_logged'))['total'] or 0.0
-
-        projects_breakdown.append({
-            "id": p.id,
-            "name": p.name,
-            "status": p.status,
-            "progress": p_progress,
-            "total_tasks": p_total,
-            "completed_tasks": p_done,
-            "last_active_member": last_member,
-            "last_active_task": last_task,
-            "sprint_name": sprint_name,
-            "sprint_due_date": sprint_due,
-            "total_hours": round(float(total_hours), 1)
-        })
-
-    return Response({
-        "program_name": program.name,
-        "pm_name": getattr(program.project_manager_assigned, 'username', "Not Assigned"),
-        "total_tasks": total_tasks,
-        "completed_tasks": completed_tasks,
-        "pending_tasks": pending_tasks,
-        "overall_progress": overall_progress,
-        "team_count": tasks.values('assigned_to').distinct().count(),
-        "velocity_data": velocity_data,
-        "task_distribution": task_distribution,
-        "gantt_data": gantt_data,
-        "recent_logs": recent_logs,
-        "projects_breakdown": projects_breakdown
-    })
+    try:
+        logger.info(f"views: program_tracker called for program {program_id}")
+        from core.services import ProgramServiceExtensions
+        data = ProgramServiceExtensions.get_tracker_data(program_id)
+        return Response(data)
+    except Exception as e:
+        logger.error(f"views: PROGRAM TRACKER ERROR: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(['GET'])
 def get_pm_dashboard_stats(request):
     username = request.query_params.get('username')
     stats_data = {'total_assigned': 0, 'pending_plans': 0, 'avg_completion': 0}
-
     if not username:
         return Response(stats_data)
-
     try:
-        pm_user = User.objects.get(username=username)
-        # 1. Total assigned programs
-        # pyrefly: ignore [missing-attribute]
-        assigned_programs = Program.objects.filter(project_manager_assigned=pm_user)
-        stats_data['total_assigned'] = assigned_programs.count()
-
-        # 2. PENDING PLANS logic
-
-        assigned_pgm_ids = assigned_programs.values_list('id', flat=True)
-        # pyrefly: ignore [missing-attribute]
-        programs_with_projects = Project.objects.filter(program_id__in=assigned_pgm_ids).values_list('program_id',
-                                                                                                     flat=True)
-
-
-        stats_data['pending_plans'] = assigned_programs.exclude(id__in=programs_with_projects).count()
-
-        # 3. AVG COMPLETION logic
-        # pyrefly: ignore [missing-attribute]
-        pm_tasks = Task.objects.filter(project__created_by=pm_user)
-        total_t = pm_tasks.count()
-        if total_t > 0:
-            done_t = pm_tasks.filter(status__icontains='Done').count()
-            stats_data['avg_completion'] = round((done_t / total_t) * 100, 1)
-
+        logger.info(f"views: get_pm_dashboard_stats called for PM {username}")
+        from core.services import StatsServiceExtensions
+        stats_data = StatsServiceExtensions.get_pm_dashboard_stats(username)
         return Response(stats_data)
     except Exception as e:
+        logger.error(f"views: GET PM DASHBOARD STATS ERROR: {str(e)}", exc_info=True)
         return Response(stats_data)
+
 @api_view(['POST'])
 def update_sprint_status(request):
     try:
@@ -756,17 +474,16 @@ def get_user_profile(request):
     if not username:
         return Response({"error": "Username required"}, status=400)
     try:
-        user = User.objects.get(username=username)
-        profile, created = Profile.objects.get_or_create(user=user)
-        return Response({
-            "username": user.username,
-            "email": user.email,
-            "role": profile.get_role_display(),
-            "bio": profile.bio or "No bio available.",
-            "phone": profile.phone or "Not provided"
-        })
+        logger.info(f"views: get_user_profile called for user {username}")
+        from core.services import ProfileService
+        p_data = ProfileService.get_user_profile(username)
+        return Response(p_data)
     except User.DoesNotExist:
+        logger.error(f"views: User {username} not found for profile view", exc_info=True)
         return Response({"error": "User not found"}, status=404)
+    except Exception as e:
+        logger.error(f"views: GET PROFILE ERROR: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=500)
 
 @api_view(['GET'])
 def get_notifications(request):
@@ -774,12 +491,9 @@ def get_notifications(request):
     if not username:
         return Response([], status=200)
     try:
-        notifications = Notification.objects.filter(user__username=username, is_read=False).order_by('-created_at')
-        data = [{
-            "id": n.id,
-            "message": n.message,
-            "created_at": n.created_at.strftime("%Y-%m-%d %H:%M")
-        } for n in notifications]
+        logger.info(f"views: get_notifications called for recipient {username}")
+        from core.services import NotificationServiceExtensions
+        data = NotificationServiceExtensions.get_notifications(username)
         return Response(data)
     except Exception as e:
         return Response([], status=200)
@@ -856,22 +570,12 @@ def request_additional_sprint(request):
 @api_view(['GET'])
 def get_pending_additional_sprints(request):
     try:
-        sprints = Sprint.objects.filter(status='Pending Approval').select_related('project', 'project__program', 'project__created_by')
-        sprint_list = []
-        for s in sprints:
-            sprint_list.append({
-                "sprint_id": s.id,
-                "sprint_name": s.name,
-                "start_date": s.start_date.strftime('%Y-%m-%d') if s.start_date else "",
-                "end_date": s.end_date.strftime('%Y-%m-%d') if s.end_date else "",
-                "project_id": s.project.id,
-                "project_name": s.project.name,
-                "project_status": s.project.status,
-                "program_name": s.project.program.name if s.project.program else "No Program",
-                "pm_username": s.project.created_by.username if s.project.created_by else "PM"
-            })
+        logger.info("views: get_pending_additional_sprints called")
+        from core.services import SprintServiceExtensions
+        sprint_list = SprintServiceExtensions.get_pending_additional_sprints()
         return Response(sprint_list)
     except Exception as e:
+        logger.error(f"views: GET PENDING ADDITIONAL SPRINTS ERROR: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=500)
 
 

@@ -12,6 +12,11 @@ import {
   valText, reviewGrid, miniTableContainer, miniTh, logoutBtnStyle, statusBadge
 } from './common/DashboardStyles';
 
+import PGMOverview from './pgm/PGMOverview';
+import PGMProgramForm from './pgm/PGMProgramForm';
+import PGMProgramWorkspace from './pgm/PGMProgramWorkspace';
+import PGMSprintApprovals from './pgm/PGMSprintApprovals';
+
 
 // Helper function for health status colors
 const getStatusColor = (endDate) => {
@@ -521,155 +526,51 @@ const PGMDashboard = ({ username, onLogout }) => {
         {/* --- DYNAMIC CONTENT --- */}
         {activeTab === 'dashboard' ? (
           <>
-            <div style={cardGrid}>
-              <SummaryCard num={programs.length} label="Total Programs" />
-              <SummaryCard num={pendingProjects.length} label="Pending Approvals" isAmber={pendingProjects.length > 0} />
-              <SummaryCard num={programs.filter(p => p.status === 'Approved').length} label="Active Programs" />
-              <SummaryCard num="94%" label="Resource Health" />
-              {(() => {
-                const myRes = resources.find(r => r.username === username);
-                const myFteVal = myRes ? myRes.assigned_fte : 0;
-                const myStatus = myRes ? myRes.workload_status : 'Free';
-                const myColor = myRes ? myRes.workload_color : 'Green';
-                return (
-                  <SummaryCard 
-                    num={`${myFteVal.toFixed(2)} FTE`} 
-                    label={`Your FTE Load (${myStatus})`} 
-                    isAmber={myColor === 'Red' || myColor === 'Yellow'} 
-                  />
-                );
-              })()}
-            </div>
+            <PGMOverview
+              programs={programs}
+              pendingProjects={pendingProjects}
+              resources={resources}
+              username={username}
+            />
 
-            <div style={{ padding: '0 25px 25px' }}>
-              {/* 1. ACTION REQUIRED */}
-              <div style={{ marginBottom: '35px' }}>
-                <div style={alertHeader}>
-                  <h3 style={{ ...sectionTitle, color: '#92400e' }}> Action Required: Project Approvals</h3>
-                  <span style={{ fontWeight: 'bold' }}>{pendingProjects.length} Pending</span>
+            {pendingSprints.length > 0 && (
+              <div style={{ padding: '0 25px 25px' }}>
+                <div style={{ ...alertHeader, background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)' }}>
+                  <h3 style={{ ...sectionTitle, color: '#fff', margin: 0 }}> Action Required: Additional Sprint Approvals</h3>
+                  <span style={{ fontWeight: 'bold', color: '#fff' }}>{pendingSprints.length} Pending Sprint(s)</span>
                 </div>
-                <div style={tableContainer}>
-                  <table style={tableStyle}>
-                    <thead style={theadStyle}>
-                      <tr>
-                        <th style={thStyle}>PROJECT DETAILS</th>
-                        <th style={thStyle}>SUBMITTED BY</th>
-                        <th style={thStyle}>TIMELINE</th>
-                        <th style={thStyle}>ACTION</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pendingProjects.length > 0 ? (
-                        pendingProjects.map(proj => (
-                          <tr key={proj.id} style={trStyle}>
-                            <td style={tdStyle}>
-                              <span style={{ fontWeight: 700, color: '#1B3A6B' }}>{proj.name}</span><br />
-                              <small style={{ color: '#666' }}>Program: {proj.program_name}</small>
-                            </td>
-                            <td style={tdStyle}>{proj.created_by_name || proj.pm_name}</td>
-                            <td style={tdStyle}>{formatDate(proj.start_date)} to {formatDate(proj.end_date)}</td>
-                            <td style={tdStyle}>
-                              <button onClick={() => { setSelectedReview(proj); setShowReviewModal(true); }} style={reviewBtn}>
-                                Review Plan
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr><td colSpan="4" style={{ ...tdStyle, textAlign: 'center' }}>No pending approvals found.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <PGMSprintApprovals
+                  pendingSprints={pendingSprints}
+                  selectedSprintReview={selectedSprintReview}
+                  onOpenSprintReview={(sprint) => {
+                    setSelectedSprintReview(sprint);
+                    setShowSprintReviewModal(true);
+                  }}
+                  onCloseSprintReview={() => setShowSprintReviewModal(false)}
+                  sprintReturnNote={sprintReturnNote}
+                  onSprintReturnNoteChange={setSprintReturnNote}
+                  onSprintDecision={handleReviewSprintSubmit}
+                />
               </div>
+            )}
 
-              {/* 1b. ADDITIONAL SPRINT APPROVALS - NEW FLOW */}
-              {pendingSprints.length > 0 && (
-                <div style={{ marginBottom: '35px' }}>
-                  <div style={{ ...alertHeader, background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)' }}>
-                    <h3 style={{ ...sectionTitle, color: '#fff' }}> Action Required: Additional Sprint Approvals</h3>
-                    <span style={{ fontWeight: 'bold', color: '#fff' }}>{pendingSprints.length} Pending Sprint(s)</span>
-                  </div>
-                  <div style={{ ...tableContainer, border: '1px solid #fef3c7' }}>
-                    <table style={tableStyle}>
-                      <thead style={{ ...theadStyle, background: '#fef3c7' }}>
-                        <tr>
-                          <th style={{ ...thStyle, color: '#92400e' }}>SPRINT DETAILS</th>
-                          <th style={{ ...thStyle, color: '#92400e' }}>PROJECT INFO</th>
-                          <th style={{ ...thStyle, color: '#92400e' }}>TIMELINE</th>
-                          <th style={{ ...thStyle, color: '#92400e' }}>ACTION</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pendingSprints.map(s => (
-                          <tr key={s.sprint_id} style={trStyle}>
-                            <td style={tdStyle}>
-                              <span style={{ fontWeight: 700, color: '#b45309' }}>{s.sprint_name}</span><br />
-                              <small style={{ color: '#666' }}>Requested by: PM (<b>{s.pm_username}</b>)</small>
-                            </td>
-                            <td style={tdStyle}>
-                              <span style={{ fontWeight: 700, color: '#1E293B' }}>{s.project_name}</span><br />
-                              <small style={{ color: '#64748B' }}>Program: {s.program_name}</small>
-                            </td>
-                            <td style={tdStyle}>{formatDate(s.start_date)} to {formatDate(s.end_date)}</td>
-                            <td style={tdStyle}>
-                              <button onClick={() => { setSelectedSprintReview(s); setShowSprintReviewModal(true); }} style={{ ...reviewBtn, backgroundColor: '#ea580c' }}>
-                                Review Sprint
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* 2. ACTIVE PROGRAMS LIST */}
-              <div style={{ marginBottom: '35px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                  <h3 style={sectionTitle}>All Programs Overview</h3>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={() => setShowModal(true)} style={primBtn}>+ Create New Program</button>
-                    <button onClick={() => setShowImportModal(true)} style={{ ...primBtn, background: '#10b981' }}>+ Bulk Import Programs</button>
-                  </div>
-                </div>
-                <div style={tableContainer}>
-                  <table style={tableStyle}>
-                    <thead style={theadStyle}>
-                      <tr>
-                        <th style={thStyle}>PROGRAM NAME</th>
-                        <th style={thStyle}>TIMELINE</th>
-                        <th style={thStyle}>STATUS</th>
-                        <th style={thStyle}>PROJECT MANAGER</th>
-                        <th style={thStyle}>ASSIGNMENT</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {programs.map(pgm => (
-                        <tr key={pgm.id} style={trStyle}>
-                          <td style={tdStyle}><b>{pgm.name}</b></td>
-                          <td style={tdStyle}>{pgm.start_date} - {pgm.end_date}</td>
-                          <td style={tdStyle}><span style={statusBadge(pgm.status)}>{pgm.status}</span></td>
-                          <td style={tdStyle}><b>{pgm.project_manager_assigned_name || 'Not Assigned'}</b></td>
-                          <td style={tdStyle}>
-                            {(pgm.status === 'Approved' || pgm.status === 'In Progress') ? (
-                              <div style={{ display: 'flex', gap: '5px' }}>
-                                <select style={miniSelect} onChange={(e) => setSelectedPMs({ ...selectedPMs, [pgm.id]: e.target.value })}>
-                                  <option value="">Select PM</option>
-                                  {pmList.map(pm => <option key={pm.id} value={pm.id}>{pm.username}</option>)}
-                                </select>
-                                <button onClick={() => handleAssignPM(pgm.id)} style={assignBtn}>Update</button>
-                              </div>
-                            ) : <span style={{ fontSize: '11px', fontStyle: 'italic' }}>Waiting Approval</span>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+            <PGMProgramWorkspace
+              pendingProjects={pendingProjects}
+              onReviewProject={(proj) => {
+                setSelectedReview(proj);
+                setShowReviewModal(true);
+              }}
+              programs={programs}
+              pmList={pmList}
+              selectedPMs={selectedPMs}
+              onPMSelectChange={(pgmId, pmId) => {
+                setSelectedPMs({ ...selectedPMs, [pgmId]: pmId });
+              }}
+              onAssignPM={handleAssignPM}
+              onOpenCreateModal={() => setShowModal(true)}
+              onOpenImportModal={() => setShowImportModal(true)}
+              formatDate={formatDate}
+            />
           </>
         ) : activeTab === 'working' ? (
           /* WORKING PROGRAMS TAB */
@@ -834,89 +735,16 @@ const PGMDashboard = ({ username, onLogout }) => {
         </div>
       )}
 
-      {/* --- REVIEW ADDITIONAL SPRINT MODAL --- */}
-      {showSprintReviewModal && (
-        <div style={modalOverlay}>
-          <div style={{ ...modalBox, width: '500px', padding: '0', borderRadius: '16px', overflow: 'hidden', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            <div style={{ background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)', padding: '20px 30px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>Review Additional Sprint</h3>
-                <span style={{ fontSize: '10px', textTransform: 'uppercase', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '10px', marginTop: '4px', display: 'inline-block', fontWeight: 'bold' }}>Active Project Request</span>
-              </div>
-              <button onClick={() => setShowSprintReviewModal(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', opacity: 0.8 }}>✕</button>
-            </div>
-            <div style={{ padding: '30px' }}>
-              <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: '12px 15px', borderRadius: '8px', marginBottom: '20px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#b45309' }}>Project Status: IN PROGRESS</span>
-                <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#92400e', lineHeight: '1.4' }}>This project has already started. This is a request from the Project Manager (<b>{selectedSprintReview?.pm_username}</b>) to add a new sprint to the timeline.</p>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
-                <div>
-                  <label style={{ ...lbl, fontSize: '12px', color: '#78350f' }}>Project Name</label>
-                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>{selectedSprintReview?.project_name}</div>
-                </div>
-                <div>
-                  <label style={{ ...lbl, fontSize: '12px', color: '#78350f' }}>Program Name</label>
-                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>{selectedSprintReview?.program_name}</div>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
-                <div>
-                  <label style={{ ...lbl, fontSize: '12px', color: '#78350f' }}>Requested Sprint</label>
-                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>{selectedSprintReview?.sprint_name}</div>
-                </div>
-                <div>
-                  <label style={{ ...lbl, fontSize: '12px', color: '#78350f' }}>Sprint Timeline</label>
-                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>{formatDate(selectedSprintReview?.start_date)} to {formatDate(selectedSprintReview?.end_date)}</div>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ ...lbl, fontSize: '12px', color: '#78350f' }}>Feedback Notes (Required only for Return)</label>
-                <textarea
-                  style={{ ...inp, padding: '10px', fontSize: '13px', borderRadius: '8px', border: '1px solid #e2e8f0', height: '80px', resize: 'vertical' }}
-                  placeholder="Enter return notes or feedback..."
-                  value={sprintReturnNote}
-                  onChange={(e) => setSprintReturnNote(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button onClick={() => setShowSprintReviewModal(false)} style={{ background: '#f1f5f9', color: '#475569', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
-                <button onClick={() => handleReviewSprintSubmit('Returned')} style={{ background: '#ea580c', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Return to PM</button>
-                <button onClick={() => handleReviewSprintSubmit('Approved')} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Approve Sprint</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
 
-      {/* MODAL: New Program Creation (Original Code - Preserved) */}
+
       {showModal && (
-        <div style={modalOverlay}>
-          <div style={modalBox}>
-            <h3 style={{ color: '#1B3A6B' }}>Initiate New Program</h3>
-            <form onSubmit={handleCreateProgram}>
-              <label style={lbl}>Title</label>
-              <input style={inp} required onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                <div><label style={lbl}>Start Date</label><input style={inp} type="date" required onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} /></div>
-                <div><label style={lbl}>End Date</label><input style={inp} type="date" required onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} /></div>
-              </div>
-              <label style={lbl}>Description</label>
-              <textarea style={{ ...inp, height: '80px' }} placeholder="Program details..." onChange={(e) => setFormData({ ...formData, description: e.target.value })}></textarea>
-              <label style={lbl}>Reference Document</label>
-              <input type="file" style={inp} onChange={(e) => setFormData({ ...formData, document: e.target.files[0] })} />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button type="button" onClick={() => setShowModal(false)} style={secBtn}>Cancel</button>
-                <button type="submit" style={primBtn}>Create Program</button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <PGMProgramForm
+          formData={formData}
+          onFormChange={(key, val) => setFormData({ ...formData, [key]: val })}
+          onSubmit={handleCreateProgram}
+          onClose={() => setShowModal(false)}
+        />
       )}
 
       {/* BULK IMPORT MODAL */}
