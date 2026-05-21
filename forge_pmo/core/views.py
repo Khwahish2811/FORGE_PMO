@@ -29,7 +29,7 @@ from django.shortcuts import get_object_or_404
 from datetime import date # Red line 1 fix
 # pyrefly: ignore [untyped-import]
 from django.db import models, transaction
-  # Apne models ke hisaab se check karein
+  # Validate according to active project models
 # pyrefly: ignore [untyped-import]
 from django.db.models import Count, Q
 # pyrefly: ignore [untyped-import]

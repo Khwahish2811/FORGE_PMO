@@ -13,7 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import os
 
-# Pehle BASE_DIR define karein
+# Define BASE_DIR first
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load .env file securely if it exists
@@ -141,7 +141,7 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 CORS_ALLOW_ALL_ORIGINS = True
-# settings.py ke ekdum niche add karein
+# Add at the very bottom of settings.py
 CSRF_TRUSTED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000']
 
 REST_FRAMEWORK = {
