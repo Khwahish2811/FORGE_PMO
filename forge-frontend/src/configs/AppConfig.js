@@ -1,4 +1,4 @@
-export const BASE_URL = "http://127.0.0.1:8000/api";
+export const BASE_URL = "https://staging.amns.in/pmo-app-api";
 
 export const METHOD_GET = "GET";
 export const METHOD_POST = "POST";

@@ -6,9 +6,9 @@ import { openNotification } from "./NotificationMessageMapping";
 
 export let HEADER_JSON = {
   Accept: "application/json",
-  // Authorization: JSON.parse(
-  //   localStorage.getItem(`${process.env.REACT_APP_TOKEN_PREFIX}-auth-token`)
-  // ),
+  Authorization: JSON.parse(
+    localStorage.getItem(`token`)
+  ),
   source: "workflow",
   req: "list",
 };
@@ -45,6 +45,9 @@ export default class ApiHelper {
         //     `${process.env.REACT_APP_TOKEN_PREFIX}-auth-token`
         //   )
         // ),
+        Authorization: JSON.parse(
+          localStorage.getItem(`token`)
+        ),
         "X-CSRFToken": getCookie(`${process.env.REACT_APP_TOKEN_PREFIX}-csrftoken`) || "",
       },
       body: values != null ? values : null,
