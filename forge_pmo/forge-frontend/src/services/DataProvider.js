@@ -109,8 +109,17 @@ export class DataProvider {
     assignPm = async (values) =>
         await this.apiHelper.apiCall(API_URLS.ASSIGN_PM, METHOD_POST, values);
 
+    assignPM = async (values) =>
+        await this.assignPm(values);
+
     approveProjectPlan = async (values) =>
         await this.apiHelper.apiCall(API_URLS.APPROVE_PROJECT_PLAN, METHOD_POST, values);
+
+    reviewProjectPlan = async (values) =>
+        await this.approveProjectPlan(values);
+
+    getAllProgramsPGM = async () =>
+        await this.getAllPrograms();
 
     createProgram = async (formData) => {
         // Since FormData cannot be stringified, use apiCall with METHOD_POST

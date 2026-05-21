@@ -54,6 +54,7 @@ const PGMDashboard = ({ username, onLogout }) => {
   const [showModal, setShowModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [programs, setPrograms] = useState([]);
   const [pmList, setPmList] = useState([]);
   const [pendingProjects, setPendingProjects] = useState([]);
@@ -139,7 +140,7 @@ const PGMDashboard = ({ username, onLogout }) => {
   // --- 1. Fetch Data ---
   const fetchData = useCallback(() => {
     Promise.all([
-      dataProvider.getAllProgramsPGM(),
+      dataProvider.getAllPrograms(),
       dataProvider.getProjectManagers(),
       dataProvider.getPendingProjects()
     ])
@@ -265,7 +266,7 @@ const PGMDashboard = ({ username, onLogout }) => {
   const handleAssignPM = (programId) => {
     const pmId = selectedPMs[programId];
     if (!pmId) { showToast(' Please select a PM first!', 'warning'); return; }
-    dataProvider.assignPM({ program_id: programId, pm_id: pmId, manager_name: username })
+    dataProvider.assignPm({ program_id: programId, pm_id: pmId, manager_name: username })
       .then(res => {
         if (res.ok) {
           showToast(' Project Manager assigned successfully!', 'success');
@@ -280,7 +281,7 @@ const PGMDashboard = ({ username, onLogout }) => {
   };
 
   const handleReviewAction = (projectId, decision) => {
-    dataProvider.reviewProjectPlan({ project_id: projectId, decision: decision })
+    dataProvider.approveProjectPlan({ project_id: projectId, decision: decision })
       .then(response => {
         if (response.ok) {
           showToast(` Project ${decision === 'approve' ? 'Approved' : 'Rejected'} successfully!`, decision === 'approve' ? 'success' : 'warning');
@@ -407,7 +408,7 @@ const PGMDashboard = ({ username, onLogout }) => {
       showToast('Please provide a reason for returning the project.', 'warning');
       return;
     }
-    dataProvider.reviewProjectPlan({ project_id: projectId, decision: decision, return_note: returnNote })
+    dataProvider.approveProjectPlan({ project_id: projectId, decision: decision, return_note: returnNote })
       .then(response => {
         if (response.ok) {
           return response.json().then(data => {
