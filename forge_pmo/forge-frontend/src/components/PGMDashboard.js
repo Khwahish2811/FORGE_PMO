@@ -654,85 +654,14 @@ const PGMDashboard = ({ username, onLogout }) => {
         onDownloadCSV={handleDownloadReport}
       />
 
-      {/* MODAL: Review Plan (Original Code - Preserved) */}
       {showReviewModal && selectedReview && (
-        <div style={modalOverlay}>
-          <div style={{ ...modalBox, width: '650px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h2 style={{ color: '#1B3A6B', borderBottom: '2px solid #2563EB', paddingBottom: '10px' }}>Project Plan Review</h2>
-            <div style={reviewGrid}>
-              <div><label style={lbl}>Project Name</label><div style={valText}>{selectedReview.project_name || selectedReview.name}</div></div>
-              <div><label style={lbl}>Submitted By</label><div style={valText}>{selectedReview.pm_name || selectedReview.created_by_name}</div></div>
-            </div>
-            <label style={lbl}>Description</label>
-            <div style={valText}>{selectedReview.description || 'No description provided'}</div>
-            <h4 style={{ marginTop: '20px' }}> Team & Resource Allocation</h4>
-            <div style={miniTableContainer}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#f1f5f9' }}>
-                    <th style={miniTh}>User</th><th style={miniTh}>Role</th><th style={miniTh}>FTE</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedReview.team_members && selectedReview.team_members.length > 0 ? (
-                    selectedReview.team_members.map((m, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid #edf2f7' }}>
-                        <td style={tdStyle}>{m.username}</td><td style={tdStyle}>{m.role}</td><td style={tdStyle}>{m.fte}</td>
-                      </tr>
-                    ))
-                  ) : (<tr><td colSpan="3" style={{ ...tdStyle, textAlign: 'center' }}>No members found</td></tr>)}
-                </tbody>
-              </table>
-            </div>
-            <h4 style={{ marginTop: '20px' }}> Proposed Sprints</h4>
-            <div style={miniTableContainer}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#f1f5f9' }}>
-                    <th style={miniTh}>Sprint Name</th><th style={miniTh}>Timeline</th><th style={miniTh}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedReview.sprints && selectedReview.sprints.length > 0 ? (
-                    selectedReview.sprints.map((s, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid #edf2f7' }}>
-                        <td style={tdStyle}>{s.name}</td><td style={tdStyle}>{formatDate(s.start_date)} to {formatDate(s.end_date)}</td>
-                        <td style={tdStyle}>
-                          <span style={{ height: '10px', width: '10px', borderRadius: '50%', backgroundColor: getStatusColor(s.end_date), display: 'inline-block', marginRight: '5px' }}></span>
-                          <span style={{ fontSize: '11px', color: getStatusColor(s.end_date) }}>{new Date(s.end_date).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0) ? 'Overdue' : 'On Track'}</span>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (<tr><td colSpan="3" style={{ ...tdStyle, textAlign: 'center' }}>No sprints found</td></tr>)}
-                </tbody>
-              </table>
-            </div>
-
-            <h4 style={{ marginTop: '20px' }}>Return Note (Required for Return)</h4>
-            <textarea
-              style={{ ...inp, height: '60px', marginBottom: '0' }}
-              placeholder="Please specify why this project is being returned..."
-              value={returnNote}
-              onChange={(e) => setReturnNote(e.target.value)}
-            ></textarea>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-              <button onClick={() => setShowReviewModal(false)} style={secBtn}>Back</button>
-              <button
-                onClick={() => handleDecision(selectedReview.id, 'approve')}
-                style={{ ...primBtn, backgroundColor: '#10b981' }}
-              >
-                Approve
-              </button>
-              <button
-                onClick={() => handleDecision(selectedReview.id, 'return')}
-                style={{ ...primBtn, backgroundColor: '#f59e0b' }}
-              >
-                Return
-              </button>
-            </div>
-          </div>
-        </div>
+        <PGMPlanReview
+          selectedReview={selectedReview}
+          onCloseReview={() => setShowReviewModal(false)}
+          returnNote={returnNote}
+          onReturnNoteChange={setReturnNote}
+          onDecision={(decision) => handleDecision(selectedReview.id, decision)}
+        />
       )}
 
 

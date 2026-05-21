@@ -16,6 +16,9 @@ import {
 import PMOverview from './pm/PMOverview';
 import PMProjectPlanForm from './pm/PMProjectPlanForm';
 import PMOngoingWorkspace from './pm/PMOngoingWorkspace';
+import PMWorkingPrograms from './pm/PMWorkingPrograms';
+import PMCreateTaskModal from './pm/PMCreateTaskModal';
+import PMSprintRequestModal from './pm/PMSprintRequestModal';
 
 // 1. Helper function for health status colors
 const getStatusColor = (endDate) => {
@@ -825,45 +828,11 @@ const lastStatItem = {
                 />
               )}
               {activeTab === 'working_programs' && (
-                <>
-                  <h3 style={sectionTitle}> Programs Currently in Execution</h3>
-                  <div style={tableContainer}>
-                    <table style={tableStyle}>
-                      <thead style={theadStyle}>
-                        <tr><th style={thStyle}>WORKING PROGRAM</th><th style={thStyle}>MANAGER</th><th style={thStyle}>LATEST STATUS</th><th style={thStyle}>ACTIONS</th></tr>
-                      </thead>
-                      <tbody>
-                        {workingPrograms.length > 0 ? workingPrograms.map((pgm) => (
-                          <tr key={pgm.id} style={trStyle}>
-                            <td style={tdStyle}><b>{pgm.name}</b><div style={{ fontSize: '11px', color: '#64748b' }}>{formatDate(pgm.start_date)} to {formatDate(pgm.end_date)}</div></td>
-                            <td style={tdStyle}>{pgm.pm_name}</td>
-                            <td style={tdStyle}>
-                              {(() => {
-                                const pct = pgm.completion_percentage || 0;
-                                  let label = "IN PROGRESS";
-                                  let color = "#1e40af";
-                                  let bg = "#dbeafe";
-
-                                  if (pct === 0) { label = "NOT STARTED"; color = "#64748b"; bg = "#f1f5f9"; }
-                                  else if (pct === 100) { label = "COMPLETED"; color = "#166534"; bg = "#dcfce7"; }
-                                  else if (pct > 90) { label = "ALMOST DONE"; color = "#854d0e"; bg = "#fef9c3"; }
-                                  else { label = `${pct}% COMPLETE`; }
-
-                                  return (
-                                    <span style={{ backgroundColor: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
-                                      {label}
-                                    </span>
-                                  );
-                                })()}
-                              </td>
-                              <td style={tdStyle}><button onClick={() => handleLiveTrack(pgm.id)} style={{ ...primBtn, padding: '6px 12px', fontSize: '12px', backgroundColor: '#8b5cf6' }}>Live Track </button></td>
-                            </tr>
-                          )) : (<tr><td colSpan="4" style={{ textAlign: 'center', padding: '20px' }}>No programs in execution.</td></tr>)}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                )}
+                <PMWorkingPrograms
+                  workingPrograms={workingPrograms}
+                  onLiveTrack={handleLiveTrack}
+                />
+              )}
               </>
         {showProjectForm && (
           <PMProjectPlanForm
@@ -892,162 +861,17 @@ const lastStatItem = {
         onDownloadCSV={handleDownloadReport}
       />
 
-      {/* CREATE TASK MODAL - Redesigned for premium look */}
-      {showTaskModal && (
-        <div style={modalOverlayStyle}>
-          <div style={{ ...modalContentStyle, width: '650px', padding: '0', borderRadius: '16px', overflow: 'hidden', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            {/* Modal Header */}
-            <div style={{ background: '#1B3A6B', padding: '20px 30px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>Create Tasks</h3>
-              <button onClick={handleCloseTaskModal} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', opacity: 0.8 }}>✕</button>
-            </div>
-            
-            <form onSubmit={handleCreateTasks} style={{ padding: '25px 30px' }}>
-              <div style={{ maxHeight: '50vh', overflowY: 'auto', paddingRight: '5px', marginBottom: '15px' }}>
-                {tasksList.map((task, index) => (
-                  <div key={index} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '20px', marginBottom: '20px', background: '#f8fafc', position: 'relative' }}>
-                    {tasksList.length > 1 && (
-                      <button 
-                        type="button" 
-                        onClick={() => setTasksList(prev => prev.filter((_, idx) => idx !== index))}
-                        style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: '#ef4444', fontSize: '13px', cursor: 'pointer', fontWeight: 'bold' }}
-                      >
-                        Remove
-                      </button>
-                    )}
-                    <h4 style={{ margin: '0 0 15px 0', color: '#1B3A6B', fontWeight: 'bold', fontSize: '14px' }}>Task #{index + 1}</h4>
-                    
-                    {/* Task Title */}
-                    <div style={{ marginBottom: '15px' }}>
-                      <label style={{ ...lbl, fontSize: '12px', color: '#1B3A6B' }}>Task Title</label>
-                      <input 
-                        style={{ ...inp, padding: '10px', fontSize: '13px', borderRadius: '6px', border: '1px solid #e2e8f0' }} 
-                        required 
-                        placeholder="What needs to be done?" 
-                        value={task.title} 
-                        onChange={(e) => {
-                          const updated = [...tasksList];
-                          updated[index].title = e.target.value;
-                          setTasksList(updated);
-                        }} 
-                      />
-                    </div>
-
-                    {/* Assignments & Sprint */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
-                      <div>
-                        <label style={{ ...lbl, fontSize: '12px', color: '#1B3A6B' }}>Assign To</label>
-                        <select 
-                          style={{ ...inp, padding: '10px', fontSize: '13px', borderRadius: '6px', border: '1px solid #e2e8f0' }} 
-                          required 
-                          value={task.assigned_to} 
-                          onChange={(e) => {
-                            const updated = [...tasksList];
-                            updated[index].assigned_to = e.target.value;
-                            setTasksList(updated);
-                          }}
-                        >
-                          <option value="">Select Member</option>
-                          {activeProjectForTask?.team_members?.map(m => ( <option key={m.username} value={m.username}>{m.username}</option> ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{ ...lbl, fontSize: '12px', color: '#1B3A6B' }}>Sprint</label>
-                        <select 
-                          style={{ ...inp, padding: '10px', fontSize: '13px', borderRadius: '6px', border: '1px solid #e2e8f0' }} 
-                          required 
-                          value={task.sprint_id} 
-                          onChange={(e) => {
-                            const updated = [...tasksList];
-                            updated[index].sprint_id = e.target.value;
-                            updated[index].due_date = '';
-                            setTasksList(updated);
-                          }}
-                        >
-                          <option value="">Select Sprint</option>
-                          {activeProjectForTask?.sprints?.filter(s => s.status !== 'Pending Approval' && s.status !== 'Returned')?.map(s => ( <option key={s.id} value={s.id}>{s.name}</option> ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Priority & Due Date */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
-                      <div>
-                        <label style={{ ...lbl, fontSize: '12px', color: '#1B3A6B' }}>Priority</label>
-                        <select 
-                          style={{ ...inp, padding: '10px', fontSize: '13px', borderRadius: '6px', border: '1px solid #e2e8f0' }} 
-                          value={task.priority} 
-                          onChange={(e) => {
-                            const updated = [...tasksList];
-                            updated[index].priority = e.target.value;
-                            setTasksList(updated);
-                          }}
-                        >
-                          <option value="Low">Low</option>
-                          <option value="Medium">Medium</option>
-                          <option value="High">High</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{ ...lbl, fontSize: '12px', color: '#1B3A6B' }}>Due Date</label>
-                        <input 
-                          type="date" 
-                          style={{ ...inp, padding: '10px', fontSize: '13px', borderRadius: '6px', border: '1px solid #e2e8f0' }} 
-                          required 
-                          min={activeProjectForTask?.sprints?.find(s => String(s.id) === String(task.sprint_id))?.start_date}
-                          max={activeProjectForTask?.sprints?.find(s => String(s.id) === String(task.sprint_id))?.end_date}
-                          value={task.due_date} 
-                          onChange={(e) => {
-                            const updated = [...tasksList];
-                            updated[index].due_date = e.target.value;
-                            setTasksList(updated);
-                          }} 
-                        />
-                        {task.sprint_id && (
-                          <div style={{ fontSize: '9px', color: '#64748b', marginTop: '4px' }}>
-                            Sprint: {formatDate(activeProjectForTask?.sprints?.find(s => String(s.id) === String(task.sprint_id))?.start_date)} to {formatDate(activeProjectForTask?.sprints?.find(s => String(s.id) === String(task.sprint_id))?.end_date)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Description */}
-                    <div>
-                      <label style={{ ...lbl, fontSize: '12px', color: '#1B3A6B' }}>Description</label>
-                      <textarea 
-                        style={{ ...inp, height: '70px', resize: 'none', padding: '10px', fontSize: '13px', borderRadius: '6px', border: '1px solid #e2e8f0' }} 
-                        placeholder="Provide more details about this task..." 
-                        value={task.description} 
-                        onChange={(e) => {
-                          const updated = [...tasksList];
-                          updated[index].description = e.target.value;
-                          setTasksList(updated);
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              <button 
-                type="button" 
-                onClick={() => setTasksList(prev => [...prev, { title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' }])}
-                style={{ ...secBtn, width: '100%', marginBottom: '20px', padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 'bold' }}
-              >
-                + Add Another Task
-              </button>
-
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
-                <button type="button" onClick={handleCloseTaskModal} style={{ ...secBtn, padding: '10px 20px', borderRadius: '8px', fontWeight: '600' }}>Cancel</button>
-                <button type="submit" style={{ ...primBtn, padding: '10px 25px', borderRadius: '8px', background: '#10B981', fontWeight: '600', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2)' }}>
-                  {isStartWorkingWorkflow ? 'Save & Start Project' : 'Save Tasks'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <PMCreateTaskModal
+        showTaskModal={showTaskModal}
+        activeProjectForTask={activeProjectForTask}
+        tasksList={tasksList}
+        onTasksListChange={setTasksList}
+        isStartWorkingWorkflow={isStartWorkingWorkflow}
+        onAddTaskRow={() => setTasksList(prev => [...prev, { title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' }])}
+        onRemoveTaskRow={(idx) => setTasksList(prev => prev.filter((_, i) => i !== idx))}
+        onSubmit={handleCreateTasks}
+        onClose={handleCloseTaskModal}
+      />
 
       {/* --- NEW UPDATE NOTE MODAL --- */}
       {showNoteModal && (
@@ -1082,63 +906,19 @@ const lastStatItem = {
       )}
 
       {/* --- REQUEST ADDITIONAL SPRINT MODAL --- */}
-      {showSprintModal && (
-        <div style={modalOverlayStyle}>
-          <div style={{ ...modalContentStyle, width: '500px', padding: '0', borderRadius: '16px', overflow: 'hidden', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            <div style={{ background: '#0891b2', padding: '20px 30px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>{sprintIdToUpdate ? 'Update Returned Sprint' : 'Request Additional Sprint'}</h3>
-              <button onClick={() => setShowSprintModal(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', opacity: 0.8 }}>✕</button>
-            </div>
-            <div style={{ padding: '30px' }}>
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ ...lbl, fontSize: '13px', color: '#0891b2' }}>Project Name</label>
-                <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#1e293b', marginTop: '5px' }}>{selectedProjectForSprint?.name}</div>
-                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>Project Timeline: <b>{formatDate(selectedProjectForSprint?.start_date)}</b> to <b>{formatDate(selectedProjectForSprint?.end_date)}</b></div>
-              </div>
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ ...lbl, fontSize: '13px', color: '#0891b2' }}>Sprint Name</label>
-                <input 
-                  style={{ ...inp, padding: '12px', fontSize: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }} 
-                  required 
-                  placeholder="e.g. Sprint 3" 
-                  value={sprintName} 
-                  onChange={(e) => setSprintName(e.target.value)} 
-                />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
-                <div>
-                  <label style={{ ...lbl, fontSize: '13px', color: '#0891b2' }}>Start Date</label>
-                  <input 
-                    type="date"
-                    style={{ ...inp, padding: '12px', fontSize: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }} 
-                    required 
-                    min={selectedProjectForSprint?.start_date}
-                    max={selectedProjectForSprint?.end_date}
-                    value={sprintStartDate} 
-                    onChange={(e) => setSprintStartDate(e.target.value)} 
-                  />
-                </div>
-                <div>
-                  <label style={{ ...lbl, fontSize: '13px', color: '#0891b2' }}>End Date</label>
-                  <input 
-                    type="date"
-                    style={{ ...inp, padding: '12px', fontSize: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }} 
-                    required 
-                    min={selectedProjectForSprint?.start_date}
-                    max={selectedProjectForSprint?.end_date}
-                    value={sprintEndDate} 
-                    onChange={(e) => setSprintEndDate(e.target.value)} 
-                  />
-                </div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button onClick={() => setShowSprintModal(false)} style={{ background: '#f1f5f9', color: '#475569', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
-                <button onClick={handleAddSprint} style={{ background: '#0891b2', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>{sprintIdToUpdate ? 'Update Sprint' : 'Request Sprint'}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <PMSprintRequestModal
+        showSprintModal={showSprintModal}
+        sprintIdToUpdate={sprintIdToUpdate}
+        sprintName={sprintName}
+        onSprintNameChange={setSprintName}
+        sprintStartDate={sprintStartDate}
+        onSprintStartDateChange={setSprintStartDate}
+        sprintEndDate={sprintEndDate}
+        onSprintEndDateChange={setSprintEndDate}
+        selectedProjectForSprint={selectedProjectForSprint}
+        onSubmit={handleAddSprint}
+        onClose={() => setShowSprintModal(false)}
+      />
 
 
       <style>{`

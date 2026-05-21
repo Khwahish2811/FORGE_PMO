@@ -36,43 +36,6 @@ export default function PGMPlanReview({
 
   return (
     <>
-      <div style={tableContainer}>
-        <table style={tableStyle}>
-          <thead style={theadStyle}>
-            <tr>
-              <th style={thStyle}>PROJECT NAME</th>
-              <th style={thStyle}>PROGRAM</th>
-              <th style={thStyle}>PROJECT MANAGER</th>
-              <th style={thStyle}>TIMELINE</th>
-              <th style={thStyle}>ACTION</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pendingProjects.length > 0 ? (
-              pendingProjects.map((p) => (
-                <tr key={p.id} style={trStyle}>
-                  <td style={tdStyle}><b>{p.project_name}</b></td>
-                  <td style={tdStyle}>{p.program_name}</td>
-                  <td style={tdStyle}>{p.pm_name}</td>
-                  <td style={tdStyle}>{p.start_date} to {p.end_date}</td>
-                  <td style={tdStyle}>
-                    <button onClick={() => onOpenReview(p)} style={reviewBtn}>
-                      Review Plan
-                    </button>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="5" style={{ textAlign: 'center', padding: '25px', color: '#64748B' }}>
-                  No project plans pending review.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
       {selectedReview && (
         <div style={modalOverlayStyle}>
           <div style={{ ...modalContentStyle, width: '750px', padding: '0', borderRadius: '16px', overflow: 'hidden', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
