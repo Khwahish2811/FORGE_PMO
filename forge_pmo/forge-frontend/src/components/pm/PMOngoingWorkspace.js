@@ -44,8 +44,75 @@ export default function PMOngoingWorkspace({
   onAddSprint,
   onTriggerUpdateSprint
 }) {
+  const getSmartInsights = () => {
+    const overloaded = [];
+    const available = [];
+    const atRiskProjects = [];
+
+    myProjects.forEach(project => {
+      const activeTasksCount = project.sprints?.reduce((total, sprint) => {
+        return total + (sprint.tasks?.filter(t => t.status !== 'Done').length || 0);
+      }, 0) || 0;
+
+      if (activeTasksCount === 0) {
+        atRiskProjects.push(project.name);
+      }
+
+      if (project.team_members) {
+        const userTaskCounts = {};
+        project.team_members.forEach(m => {
+          if (!userTaskCounts[m.username]) userTaskCounts[m.username] = 0;
+          userTaskCounts[m.username] += (m.task_count || 0);
+        });
+        Object.entries(userTaskCounts).forEach(([username, count]) => {
+          if (count === 0) {
+            if (!available.includes(username)) available.push(username);
+          }
+          if (count > 5) {
+            if (!overloaded.includes(username)) overloaded.push(username);
+          }
+        });
+      }
+    });
+
+    return { overloaded, available, atRiskProjects };
+  };
+
+  const insights = getSmartInsights();
+
   return (
-    <div style={tableContainer}>
+    <div>
+      {/* SMART INSIGHTS PANEL */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: '25px' }}>
+        <div style={{ background: '#fff', borderRadius: '12px', padding: '15px', border: '1px solid #e2e8f0', borderLeft: '4px solid #10b981', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+          <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}> Available Bandwidth</h4>
+          <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1B3A6B' }}>
+            {insights.available.length > 0 ? (
+              <span>Ready for tasks: <span style={{ color: '#10b981' }}>{insights.available.join(', ')}</span></span>
+            ) : <span style={{ color: '#64748b' }}>Everyone is currently assigned tasks.</span>}
+          </div>
+        </div>
+        
+        <div style={{ background: '#fff', borderRadius: '12px', padding: '15px', border: '1px solid #e2e8f0', borderLeft: '4px solid #ef4444', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+          <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}> Overload Warning</h4>
+          <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1B3A6B' }}>
+            {insights.overloaded.length > 0 ? (
+              <span>High workload detected: <span style={{ color: '#ef4444' }}>{insights.overloaded.join(', ')}</span></span>
+            ) : <span style={{ color: '#64748b' }}>Team workload is perfectly balanced.</span>}
+          </div>
+        </div>
+
+        <div style={{ background: '#fff', borderRadius: '12px', padding: '15px', border: '1px solid #e2e8f0', borderLeft: '4px solid #f59e0b', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+          <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}> Project Health</h4>
+          <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1B3A6B' }}>
+            {insights.atRiskProjects.length > 0 ? (
+              <span>0 Tasks in: <span style={{ color: '#f59e0b' }}>{insights.atRiskProjects.join(', ')}</span></span>
+            ) : <span style={{ color: '#64748b' }}>All active projects have executing tasks.</span>}
+          </div>
+        </div>
+      </div>
+
+      <div style={tableContainer}>
       <table style={tableStyle}>
         <thead style={theadStyle}>
           <tr>
@@ -274,6 +341,7 @@ export default function PMOngoingWorkspace({
           )}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }

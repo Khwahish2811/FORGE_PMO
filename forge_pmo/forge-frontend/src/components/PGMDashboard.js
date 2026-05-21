@@ -16,6 +16,9 @@ import PGMOverview from './pgm/PGMOverview';
 import PGMProgramForm from './pgm/PGMProgramForm';
 import PGMProgramWorkspace from './pgm/PGMProgramWorkspace';
 import PGMSprintApprovals from './pgm/PGMSprintApprovals';
+import UserProfileModal from './common/UserProfileModal';
+import PGMProgramImportModal from './pgm/PGMProgramImportModal';
+import PGMWorkingPrograms from './pgm/PGMWorkingPrograms';
 
 
 // Helper function for health status colors
@@ -412,45 +415,11 @@ const PGMDashboard = ({ username, onLogout }) => {
   return (
     <div style={layoutContainer}>
 
-      {/* PROFILE MODAL */}
-      {showProfileModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', width: '450px', borderRadius: '24px', padding: '30px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.3)', position: 'relative' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
-              <h2 style={{ margin: 0, color: '#1B3A6B' }}>User Profile</h2>
-              <button onClick={() => setShowProfileModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748B' }}>✕</button>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '25px' }}>
-              <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, #1e40af, #3b82f6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold' }}>
-                {profileData.username?.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <h3 style={{ margin: '0 0 5px 0', fontSize: '20px', color: '#0F172A' }}>{profileData.username}</h3>
-                <span style={{ background: '#EFF6FF', color: '#3B82F6', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '800' }}>{profileData.role}</span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Email Address</label>
-                <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.email}</div>
-              </div>
-              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Contact Number</label>
-                <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.phone}</div>
-              </div>
-              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Bio / About</label>
-                <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px', lineHeight: '1.5' }}>{profileData.bio}</div>
-              </div>
-              <div style={{ marginTop: '10px', padding: '12px', background: '#FEF3C7', color: '#92400E', borderRadius: '8px', fontSize: '12px', border: '1px solid #FDE68A', textAlign: 'center' }}>
-                Profile details are managed by HR/Admin and cannot be edited.
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <UserProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        profileData={profileData}
+      />
 
 
       {/* TOAST NOTIFICATION */}
@@ -573,71 +542,12 @@ const PGMDashboard = ({ username, onLogout }) => {
             />
           </>
         ) : activeTab === 'working' ? (
-          /* WORKING PROGRAMS TAB */
-          <div style={{ padding: '25px' }}>
-            <h3 style={{ ...sectionTitle, marginBottom: '20px', fontSize: '18px' }}> Programs Currently in Execution</h3>
-            <div style={tableContainer}>
-              <table style={tableStyle}>
-                <thead style={theadStyle}>
-                  <tr>
-                    <th style={thStyle}>WORKING PROGRAM</th>
-                    <th style={thStyle}>MANAGER</th>
-                    <th style={thStyle}>LATEST STATUS</th>
-                    <th style={thStyle}>ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {programs.filter(p => (p.status === 'Approved' || p.status === 'In Progress') && p.project_manager_assigned_name).length > 0 ? (
-                    programs
-                      .filter(p => (p.status === 'Approved' || p.status === 'In Progress') && p.project_manager_assigned_name)
-                      .map(pgm => (
-                        <tr key={pgm.id} style={trStyle}>
-                          <td style={tdStyle}>
-                            <div style={{ fontWeight: '700', color: '#1e293b' }}>{pgm.name}</div>
-                            <div style={{ fontSize: '11px', color: '#64748b' }}>{formatDate(pgm.start_date)} to {formatDate(pgm.end_date)}</div>
-                          </td>
-                          <td style={tdStyle}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div style={{ width: '25px', height: '25px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', color: '#fff', fontWeight: 'bold', fontSize: '10px' }}>{pgm.project_manager_assigned_name.charAt(0)}</div>
-                              {pgm.project_manager_assigned_name}
-                            </div>
-                          </td>
-                          <td style={tdStyle}>
-                            {(() => {
-                              const pct = pgm.completion_percentage || 0;
-                              let label = "IN PROGRESS";
-                              let color = "#1e40af";
-                              let bg = "#dbeafe";
-
-                              if (pct === 0) { label = "NOT STARTED"; color = "#64748b"; bg = "#f1f5f9"; }
-                              else if (pct === 100) { label = "COMPLETED"; color = "#166534"; bg = "#dcfce7"; }
-                              else if (pct > 90) { label = "ALMOST DONE"; color = "#854d0e"; bg = "#fef9c3"; }
-                              else { label = `${pct}% COMPLETE`; }
-
-                              return (
-                                <span style={{ background: bg, color: color, padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
-                                  {label}
-                                </span>
-                              );
-                            })()}
-                          </td>
-                          <td style={tdStyle}>
-                            <button
-                              onClick={() => handleLiveTrack(pgm.id)}
-                              style={{ ...primBtn, padding: '8px 15px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' }}
-                            >
-                              {loadingStats ? 'Loading...' : 'Live Track '}
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                  ) : (
-                    <tr><td colSpan="4" style={{ ...tdStyle, textAlign: 'center' }}>No active working programs to track.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <PGMWorkingPrograms
+            programs={programs}
+            formatDate={formatDate}
+            handleLiveTrack={handleLiveTrack}
+            loadingStats={loadingStats}
+          />
         ) : null}
 
 
@@ -676,147 +586,18 @@ const PGMDashboard = ({ username, onLogout }) => {
         />
       )}
 
-      {/* BULK IMPORT MODAL */}
-      {showImportModal && (
-        <div style={modalOverlay}>
-          <div style={{ ...modalBox, width: parsedRecords.length > 0 ? '900px' : '550px', maxHeight: '90vh', overflowY: 'auto', transition: 'width 0.3s ease-in-out' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px', marginBottom: '20px' }}>
-              <div>
-                <h3 style={{ margin: 0, color: '#1B3A6B' }}>Automated Spreadsheet Bulk Program Import</h3>
-                <p style={{ margin: 0, fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Upload Excel (.xlsx, .xls) or CSV files to quickly provision multiple programs.</p>
-              </div>
-              <button onClick={() => { setShowImportModal(false); setParsedRecords([]); setParseSummary(null); }} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
-            </div>
-
-            {/* Drag & Drop Standard File Upload Block */}
-            <div style={{ padding: '20px', border: '2px dashed #cbd5e1', borderRadius: '10px', background: '#f8fafc', textAlign: 'center', marginBottom: '20px' }}>
-              <p style={{ margin: '0 0 5px 0', fontSize: '13px', fontWeight: 'bold', color: '#334155' }}>Drag and drop your Excel or CSV file here, or click to upload</p>
-              <p style={{ margin: '0 0 15px 0', fontSize: '11px', color: '#64748b' }}>Supports headers: <b>Program Name</b>, <b>Description</b>, <b>Start Date</b>, <b>End Date</b></p>
-              
-              <input 
-                type="file" 
-                accept=".csv, .xlsx, .xls" 
-                onChange={handleFileChange} 
-                style={{ display: 'none' }} 
-                id="bulk-excel-uploader" 
-              />
-              <label 
-                htmlFor="bulk-excel-uploader" 
-                style={{ ...primBtn, background: '#2563eb', padding: '8px 16px', fontSize: '12px', display: 'inline-block', cursor: 'pointer' }}
-              >
-                Choose File
-              </label>
-
-              <button 
-                onClick={handleDownloadTemplate} 
-                style={{ background: 'none', border: 'none', color: '#2563eb', textDecoration: 'underline', fontSize: '12px', marginLeft: '15px', cursor: 'pointer', fontWeight: '600' }}
-              >
-                Download CSV Template
-              </button>
-            </div>
-
-            {/* LOADING SPINNER */}
-            {isParsing && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '30px' }}>
-                <div style={{ width: '40px', height: '40px', border: '4px solid #f3f3f3', borderTop: '4px solid #2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                <p style={{ margin: '15px 0 0 0', fontSize: '13px', color: '#475569', fontWeight: '600' }}>Parsing spreadsheet & running database duplicate validation checks...</p>
-              </div>
-            )}
-
-            {/* PREVIEW CONTAINER */}
-            {!isParsing && parsedRecords.length > 0 && (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#eff6ff', padding: '12px 18px', borderRadius: '8px', border: '1px solid #bfdbfe', marginBottom: '20px' }}>
-                  <div style={{ fontSize: '13px', color: '#1e3a8a', fontWeight: 'bold' }}>
-                    Spreadsheet Parsed: <b>{parseSummary?.total_records} Rows Total</b>
-                  </div>
-                  <div style={{ display: 'flex', gap: '15px', fontSize: '12px' }}>
-                    <span style={{ color: '#166534', fontWeight: 'bold' }}>✓ {parseSummary?.valid_records} Ready</span>
-                    <span style={{ color: '#991b1b', fontWeight: 'bold' }}>✗ {parseSummary?.invalid_records} Errors</span>
-                  </div>
-                </div>
-
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#1e293b' }}>Import Preview Table</h4>
-                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', maxHeight: '300px', overflowY: 'auto', marginBottom: '20px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                    <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0 }}>
-                      <tr>
-                        <th style={{ padding: '10px', textAlign: 'left', color: '#475569', fontWeight: 'bold' }}>ROW</th>
-                        <th style={{ padding: '10px', textAlign: 'left', color: '#475569', fontWeight: 'bold' }}>PROGRAM NAME</th>
-                        <th style={{ padding: '10px', textAlign: 'left', color: '#475569', fontWeight: 'bold' }}>TIMELINE</th>
-                        <th style={{ padding: '10px', textAlign: 'left', color: '#475569', fontWeight: 'bold' }}>DESCRIPTION</th>
-                        <th style={{ padding: '10px', textAlign: 'left', color: '#475569', fontWeight: 'bold' }}>VERIFICATION</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parsedRecords.map((r) => (
-                        <tr 
-                          key={r.row_index} 
-                          style={{ 
-                            borderBottom: '1px solid #e2e8f0', 
-                            background: r.is_valid ? '#fefefe' : '#fff5f5',
-                            transition: 'background 0.2s'
-                          }}
-                        >
-                          <td style={{ padding: '10px', fontWeight: 'bold', color: '#64748b' }}>{r.row_index}</td>
-                          <td style={{ padding: '10px', fontWeight: 'bold', color: r.is_valid ? '#0f172a' : '#991b1b' }}>{r.name || '(Empty)'}</td>
-                          <td style={{ padding: '10px', color: '#475569' }}>
-                            {r.start_date || r.end_date ? `${formatDate(r.start_date)} to ${formatDate(r.end_date)}` : 'No Dates Specified'}
-                          </td>
-                          <td style={{ padding: '10px', color: '#64748b', maxLines: 1, textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '200px' }}>
-                            {r.description || '-'}
-                          </td>
-                          <td style={{ padding: '10px' }}>
-                            {r.is_valid ? (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '12px', fontWeight: 'bold', fontSize: '10px' }}>
-                                ✓ Ready to Import
-                              </span>
-                            ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#fee2e2', color: '#b91c1c', padding: '3px 8px', borderRadius: '12px', fontWeight: 'bold', fontSize: '10px', width: 'fit-content' }}>
-                                  ✗ Validation Failed
-                                </span>
-                                <ul style={{ margin: 0, paddingLeft: '12px', color: '#b91c1c', fontSize: '10px', lineHeight: '1.3' }}>
-                                  {r.errors.map((err, errIdx) => (
-                                    <li key={errIdx}>{err}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                  <button 
-                    onClick={() => { setParsedRecords([]); setParseSummary(null); }} 
-                    style={{ ...secBtn, padding: '8px 16px', fontSize: '12px' }}
-                  >
-                    Clear Preview
-                  </button>
-                  <button 
-                    disabled={isImporting || parseSummary?.valid_records === 0} 
-                    onClick={handleApproveImport} 
-                    style={{ 
-                      ...primBtn, 
-                      background: parseSummary?.valid_records === 0 ? '#cbd5e1' : '#10b981', 
-                      cursor: parseSummary?.valid_records === 0 ? 'not-allowed' : 'pointer',
-                      padding: '8px 18px',
-                      fontSize: '12px',
-                      color: '#fff'
-                    }}
-                  >
-                    {isImporting ? 'Importing Valid Programs...' : `Approve & Import ${parseSummary?.valid_records} Programs`}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <PGMProgramImportModal
+        showImportModal={showImportModal}
+        onClose={() => { setShowImportModal(false); setParsedRecords([]); setParseSummary(null); }}
+        isParsing={isParsing}
+        parsedRecords={parsedRecords}
+        parseSummary={parseSummary}
+        isImporting={isImporting}
+        onFileChange={handleFileChange}
+        onDownloadTemplate={handleDownloadTemplate}
+        onApproveImport={handleApproveImport}
+        formatDate={formatDate}
+      />
       </div>
     </div>
   );

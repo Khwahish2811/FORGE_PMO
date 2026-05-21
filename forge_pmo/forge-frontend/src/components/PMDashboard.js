@@ -19,6 +19,9 @@ import PMOngoingWorkspace from './pm/PMOngoingWorkspace';
 import PMWorkingPrograms from './pm/PMWorkingPrograms';
 import PMCreateTaskModal from './pm/PMCreateTaskModal';
 import PMSprintRequestModal from './pm/PMSprintRequestModal';
+import UserProfileModal from './common/UserProfileModal';
+import PMUpdateNoteModal from './pm/PMUpdateNoteModal';
+import PMMemberPerformanceModal from './pm/PMMemberPerformanceModal';
 
 // 1. Helper function for health status colors
 const getStatusColor = (endDate) => {
@@ -563,75 +566,15 @@ const lastStatItem = {
     } catch (err) { showToast(' Connection failed. Check your server.', 'error'); }
   };
 
-  const getSmartInsights = () => {
-    let overloaded = [];
-    let available = [];
-    let atRiskProjects = [];
-    const userTaskCounts = {};
-
-    myProjects.forEach(project => {
-      if (project.total_tasks === 0 && (project.status === 'Active' || project.status === 'In Progress' || project.status === 'Approved')) {
-        atRiskProjects.push(project.name);
-      }
-      if (project.team_members) {
-        project.team_members.forEach(m => {
-          if (!userTaskCounts[m.username]) userTaskCounts[m.username] = 0;
-          userTaskCounts[m.username] += (m.task_count || 0);
-        });
-      }
-    });
-
-    Object.entries(userTaskCounts).forEach(([username, count]) => {
-      if (count === 0) available.push(username);
-      if (count > 5) overloaded.push(username);
-    });
-
-    return { overloaded, available, atRiskProjects };
-  };
-  const insights = getSmartInsights();
 
   return (
     <div style={layoutContainer}>
       
-      {/* PROFILE MODAL */}
-      {showProfileModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ background: '#fff', width: '450px', borderRadius: '24px', padding: '30px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.3)', position: 'relative', animation: 'modalSlideUp 0.4s ease-out' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #f1f5f9', paddingBottom: '15px' }}>
-                    <h2 style={{ margin: 0, color: '#1B3A6B' }}>User Profile</h2>
-                    <button onClick={() => setShowProfileModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748B' }}>✕</button>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '25px' }}>
-                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, #1B3A6B, #3B82F6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(27,58,107,0.4)' }}>
-                        {profileData.username?.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                        <h3 style={{ margin: '0 0 5px 0', fontSize: '20px', color: '#0F172A' }}>{profileData.username}</h3>
-                        <span style={{ background: '#EFF6FF', color: '#3B82F6', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '800' }}>{profileData.role}</span>
-                    </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Email Address</label>
-                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.email}</div>
-                    </div>
-                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Contact Number</label>
-                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px' }}>{profileData.phone}</div>
-                    </div>
-                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Bio / About</label>
-                        <div style={{ fontSize: '14px', color: '#1e293b', marginTop: '4px', lineHeight: '1.5' }}>{profileData.bio}</div>
-                    </div>
-                    <div style={{ marginTop: '10px', padding: '12px', background: '#FEF3C7', color: '#92400E', borderRadius: '8px', fontSize: '12px', border: '1px solid #FDE68A', textAlign: 'center' }}>
-                         Profile details are managed by HR/Admin and cannot be edited.
-                    </div>
-                </div>
-            </div>
-        </div>
-      )}
+      <UserProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        profileData={profileData}
+      />
 
       
       {/* TOAST NOTIFICATION */}
@@ -748,35 +691,6 @@ const lastStatItem = {
                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#1B3A6B' }}>Project Execution & Task Management</h3>
                   </div>
 
-                  {/* SMART INSIGHTS PANEL */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: '25px' }}>
-                    <div style={{ background: '#fff', borderRadius: '12px', padding: '15px', border: '1px solid #e2e8f0', borderLeft: '4px solid #10b981', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                      <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}> Available Bandwidth</h4>
-                      <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1B3A6B' }}>
-                        {insights.available.length > 0 ? (
-                          <span>Ready for tasks: <span style={{ color: '#10b981' }}>{insights.available.join(', ')}</span></span>
-                        ) : <span style={{ color: '#64748b' }}>Everyone is currently assigned tasks.</span>}
-                      </div>
-                    </div>
-                    
-                    <div style={{ background: '#fff', borderRadius: '12px', padding: '15px', border: '1px solid #e2e8f0', borderLeft: '4px solid #ef4444', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                      <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}> Overload Warning</h4>
-                      <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1B3A6B' }}>
-                        {insights.overloaded.length > 0 ? (
-                          <span>High workload detected: <span style={{ color: '#ef4444' }}>{insights.overloaded.join(', ')}</span></span>
-                        ) : <span style={{ color: '#64748b' }}>Team workload is perfectly balanced.</span>}
-                      </div>
-                    </div>
-
-                    <div style={{ background: '#fff', borderRadius: '12px', padding: '15px', border: '1px solid #e2e8f0', borderLeft: '4px solid #f59e0b', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                      <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}> Project Health</h4>
-                      <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1B3A6B' }}>
-                        {insights.atRiskProjects.length > 0 ? (
-                          <span>0 Tasks in: <span style={{ color: '#f59e0b' }}>{insights.atRiskProjects.join(', ')}</span></span>
-                        ) : <span style={{ color: '#64748b' }}>All active projects have executing tasks.</span>}
-                      </div>
-                    </div>
-                  </div>
 
                   <PMOngoingWorkspace
                     myProjects={myProjects}
@@ -873,37 +787,16 @@ const lastStatItem = {
         onClose={handleCloseTaskModal}
       />
 
-      {/* --- NEW UPDATE NOTE MODAL --- */}
-      {showNoteModal && (
-        <div style={modalOverlayStyle}>
-          <div style={{ ...modalContentStyle, width: '500px', padding: '0', borderRadius: '16px', overflow: 'hidden', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            <div style={{ background: '#4f46e5', padding: '20px 30px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>Post Project Update / Announcement</h3>
-              <button onClick={() => setShowNoteModal(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', opacity: 0.8 }}>✕</button>
-            </div>
-            <div style={{ padding: '30px' }}>
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ ...lbl, fontSize: '13px', color: '#4f46e5' }}>Project Name</label>
-                <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#1e293b', marginTop: '5px' }}>{selectedProjectForNote?.name}</div>
-              </div>
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ ...lbl, fontSize: '13px', color: '#4f46e5' }}>Announcement Note</label>
-                <textarea 
-                  style={{ ...inp, padding: '12px', fontSize: '14px', borderRadius: '8px', border: '1px solid #e2e8f0', height: '100px', resize: 'vertical' }} 
-                  required 
-                  placeholder="Enter latest project update, notes, or warning for team members..." 
-                  value={updateNoteText} 
-                  onChange={(e) => setUpdateNoteText(e.target.value)} 
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button onClick={() => setShowNoteModal(false)} style={{ background: '#f1f5f9', color: '#475569', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
-                <button onClick={handlePostNote} style={{ background: '#4f46e5', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>Post Update</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <PMUpdateNoteModal
+        showNoteModal={showNoteModal}
+        selectedProjectForNote={selectedProjectForNote}
+        updateNoteText={updateNoteText}
+        onUpdateNoteTextChange={setUpdateNoteText}
+        onSubmit={handlePostNote}
+        onClose={() => setShowNoteModal(false)}
+        modalOverlayStyle={modalOverlayStyle}
+        modalContentStyle={modalContentStyle}
+      />
 
       {/* --- REQUEST ADDITIONAL SPRINT MODAL --- */}
       <PMSprintRequestModal
@@ -935,54 +828,10 @@ const lastStatItem = {
         .activity-card { transition: all 0.2s ease; border: 1px solid transparent; }
         .activity-card:hover { border-color: #e0e7ff; background: #fff !important; transform: scale(1.01); }
       `}</style>
-      {/* MEMBER DETAIL MODAL */}
-      {selectedMemberDetail && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ background: '#fff', width: '600px', borderRadius: '24px', padding: '30px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h2 style={{ margin: 0, color: '#1B3A6B' }}>Member Performance: {selectedMemberDetail.username}</h2>
-                    <button onClick={() => setSelectedMemberDetail(null)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✕</button>
-                </div>
-                
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: '25px' }}>
-                   <div style={{ background: '#F8FAF6', padding: '15px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '10px', color: '#64748B', textTransform: 'uppercase' }}>Efficiency</div>
-                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#10B981' }}>{selectedMemberDetail.completion_rate}%</div>
-                   </div>
-                   <div style={{ background: '#F8FAFC', padding: '15px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '10px', color: '#64748B', textTransform: 'uppercase' }}>Projects</div>
-                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#3B82F6' }}>{selectedMemberDetail.total_projects}</div>
-                   </div>
-                   <div style={{ background: '#FFF7ED', padding: '15px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '10px', color: '#64748B', textTransform: 'uppercase' }}>Workload (FTE)</div>
-                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#F59E0B' }}>{selectedMemberDetail.total_fte.toFixed(1)}</div>
-                   </div>
-                </div>
-
-                <h4 style={{ fontSize: '14px', color: '#1B3A6B', marginBottom: '15px' }}>Recent Task Execution</h4>
-                <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid #F1F5F9', borderRadius: '12px' }}>
-                   {selectedMemberDetail.recent_tasks.length > 0 ? (
-                     selectedMemberDetail.recent_tasks.map((t, idx) => (
-                       <div key={idx} style={{ padding: '15px', borderBottom: idx !== selectedMemberDetail.recent_tasks.length - 1 ? '1px solid #F1F5F9' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                             <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{t.title}</div>
-                             <div style={{ fontSize: '11px', color: '#64748B' }}>{t.project} • Due: {t.due_date}</div>
-                          </div>
-                          <span style={{ 
-                            padding: '4px 10px', 
-                            borderRadius: '12px', 
-                            fontSize: '10px', 
-                            fontWeight: 'bold',
-                            background: t.status === 'Done' ? '#DCFCE7' : '#FEF3C7',
-                            color: t.status === 'Done' ? '#166534' : '#92400E'
-                          }}>{t.status}</span>
-                       </div>
-                     ))
-                   ) : <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8' }}>No recent tasks found.</div>}
-                </div>
-            </div>
-        </div>
-      )}
+      <PMMemberPerformanceModal
+        selectedMemberDetail={selectedMemberDetail}
+        onClose={() => setSelectedMemberDetail(null)}
+      />
     </div>
   );
 };
