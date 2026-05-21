@@ -19,6 +19,7 @@ import PGMSprintApprovals from './pgm/PGMSprintApprovals';
 import UserProfileModal from './common/UserProfileModal';
 import PGMProgramImportModal from './pgm/PGMProgramImportModal';
 import PGMWorkingPrograms from './pgm/PGMWorkingPrograms';
+import PGMPlanReview from './pgm/PGMPlanReview';
 
 
 // Helper function for health status colors
