@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { layoutContainer, mainContentStyle } from './common/DashboardStyles';
+import { DataProvider } from '../services/DataProvider';
+import { openNotification } from '../utils/NotificationMessageMapping';
 
 import PMOverview from './pm/PMOverview';
 import PMOngoingWorkspace from './pm/PMOngoingWorkspace';
@@ -11,6 +13,8 @@ import ToastNotification from './common/ToastNotification';
 import PMSidebar from './pm/PMSidebar';
 import PMHeader from './pm/PMHeader';
 import PMModals from './pm/PMModals';
+
+const dataProvider = new DataProvider();
 
 // 1. Helper function for health status colors
 const getStatusColor = (endDate) => {
@@ -106,111 +110,150 @@ const PMDashboard = ({ username, onLogout }) => {
   });
 
   // --- ALL FETCH FUNCTIONS MOVED TO TOP ---
-  const fetchData = useCallback(async (isSilent = false) => {
+  const fetchData = useCallback((isSilent = false) => {
     if (!isSilent) setLoading(true);
-    try {
-      const progRes = await fetch(`http://127.0.0.1:8000/api/my-assigned-programs/?username=${username || 'rahul_pm'}`);
+    Promise.all([
+      dataProvider.myAssignedPrograms(username || 'rahul_pm'),
+      dataProvider.getTeamMembers(),
+      dataProvider.getActiveProjects(username),
+      dataProvider.getWorkingPrograms(username)
+    ])
+    .then(([progRes, empRes, projRes, workingRes]) => {
+      // 1. myAssignedPrograms
       if (progRes.ok) {
-        const data = await progRes.json();
-        // Sort data: 'Build Plan' and 'Returned' first
-        const sortedData = data.sort((a, b) => {
-          const priority = { 'Build Plan': 1, 'Returned': 2, 'Approved': 3, 'Waiting': 4, 'Updated Plan Sent': 5, 'In Progress': 6 };
-          const valA = priority[a.status_label] || 99;
-          const valB = priority[b.status_label] || 99;
-          return valA - valB;
+        progRes.json().then(data => {
+          const sortedData = data.sort((a, b) => {
+            const priority = { 'Build Plan': 1, 'Returned': 2, 'Approved': 3, 'Waiting': 4, 'Updated Plan Sent': 5, 'In Progress': 6 };
+            const valA = priority[a.status_label] || 99;
+            const valB = priority[b.status_label] || 99;
+            return valA - valB;
+          });
+          setAssignedPrograms(sortedData);
         });
-        setAssignedPrograms(sortedData);
+      } else {
+        openNotification('error', 'Failed to fetch assigned programs');
       }
-      const empRes = await fetch('http://127.0.0.1:8000/api/get-team-members/');
+
+      // 2. getTeamMembers
       if (empRes.ok) {
-        const data = await empRes.json();
-        setEmployees(data);
+        empRes.json().then(data => setEmployees(data));
+      } else {
+        openNotification('error', 'Failed to fetch team members');
       }
-      const projRes = await fetch(`http://127.0.0.1:8000/api/get-active-projects/?username=${username}`);
+
+      // 3. getActiveProjects
       if (projRes.ok) {
-        const data = await projRes.json();
-        setMyProjects(data);
+        projRes.json().then(data => setMyProjects(data));
+      } else {
+        openNotification('error', 'Failed to fetch active projects');
       }
-      const workingRes = await fetch(`http://127.0.0.1:8000/api/get-working-programs/?username=${username}`);
+
+      // 4. getWorkingPrograms
       if (workingRes.ok) {
-        const data = await workingRes.json();
-        setWorkingPrograms(data);
+        workingRes.json().then(data => setWorkingPrograms(data));
+      } else {
+        openNotification('error', 'Failed to fetch working programs');
       }
-    } catch (error) {
-      console.error("Fetch error:", error);
-    } finally {
-      setLoading(false);
-    }
+    })
+    .catch(error => console.error("Fetch error:", error))
+    .finally(() => setLoading(false));
   }, [username]);
 
-  const fetchDashboardStats = useCallback(async () => {
-    try {
-      const response = await fetch(`http://127.0.0.1:8000/api/pm-dashboard-stats/?username=${username}`);
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
-      }
-    } catch (err) {
-      console.error("Stats fetch error:", err);
-    }
+  const fetchDashboardStats = useCallback(() => {
+    dataProvider.pmDashboardStats(username)
+      .then(response => {
+        if (response.ok) {
+          return response.json().then(data => setStats(data));
+        } else {
+          return response.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch dashboard stats');
+          });
+        }
+      })
+      .catch(err => console.error("Stats fetch error:", err));
   }, [username]);
 
-  const fetchUserProfile = useCallback(async () => {
-      try {
-          const res = await fetch(`http://127.0.0.1:8000/api/get-user-profile/?username=${username}`);
-          if (res.ok) setProfileData(await res.json());
-      } catch (err) { console.error("Profile fetch error:", err); }
+  const fetchUserProfile = useCallback(() => {
+    dataProvider.fetchProfileDetails(username)
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => setProfileData(data));
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch user profile');
+          });
+        }
+      })
+      .catch(err => console.error("Profile fetch error:", err));
   }, [username]);
 
-  const fetchNotifications = useCallback(async () => {
-      try {
-          const res = await fetch(`http://127.0.0.1:8000/api/get-notifications/?username=${username}`);
-          if (res.ok) {
-              const data = await res.json();
-              if (data.length > prevNotificationsCount.current) {
-                  const newCount = data.length - prevNotificationsCount.current;
-                  for (let i = 0; i < newCount; i++) {
-                      if (data[i]) {
-                          showToast(`🔔 Notification: ${data[i].message}`, 'success');
-                      }
-                  }
+  const fetchNotifications = useCallback(() => {
+    dataProvider.getNotifications(username)
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => {
+            if (data.length > prevNotificationsCount.current) {
+              const newCount = data.length - prevNotificationsCount.current;
+              for (let i = 0; i < newCount; i++) {
+                if (data[i]) {
+                  showToast(`🔔 Notification: ${data[i].message}`, 'success');
+                }
               }
-              setNotifications(data);
-              prevNotificationsCount.current = data.length;
-          }
-      } catch (err) { console.error("Notification fetch error:", err); }
+            }
+            setNotifications(data);
+            prevNotificationsCount.current = data.length;
+          });
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch notifications');
+          });
+        }
+      })
+      .catch(err => console.error("Notification fetch error:", err));
   }, [username, showToast]);
 
 
-  const fetchTeamPerformance = useCallback(async () => {
-    try {
-      const res = await fetch(`http://127.0.0.1:8000/api/get-team-performance/?username=${username}`);
-      if (res.ok) setTeamPerformance(await res.json());
-    } catch (err) { console.error("Performance fetch error:", err); }
+  const fetchTeamPerformance = useCallback(() => {
+    dataProvider.getTeamPerformance(username)
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => setTeamPerformance(data));
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch team performance');
+          });
+        }
+      })
+      .catch(err => console.error("Performance fetch error:", err));
   }, [username]);
 
-  const fetchResources = useCallback(async () => {
-    try {
-      const res = await fetch('http://127.0.0.1:8000/api/get-all-resources/');
-      if (res.ok) {
-        const data = await res.json();
-        setResources(data);
-      }
-    } catch (err) {
-      console.error("Resources fetch error:", err);
-    }
+  const fetchResources = useCallback(() => {
+    dataProvider.getAllResources()
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => setResources(data));
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch resources');
+          });
+        }
+      })
+      .catch(err => console.error("Resources fetch error:", err));
   }, []);
 
 
-  const markRead = async () => {
-      try {
-          await fetch('http://127.0.0.1:8000/api/mark-notifications-read/', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username })
-          });
+  const markRead = () => {
+    dataProvider.markNotificationsRead({ username })
+      .then(res => {
+        if (res.ok) {
           setNotifications([]);
-      } catch (err) { console.error("Mark read error:", err); }
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to mark notifications read');
+          });
+        }
+      })
+      .catch(err => console.error("Mark read error:", err));
   };
 
   const industryHeader = {
@@ -265,29 +308,28 @@ const lastStatItem = {
     };
   }, [fetchData, fetchDashboardStats, fetchNotifications, fetchUserProfile, fetchTeamPerformance, fetchResources]);
 
-  const handlePostNote = async () => {
+  const handlePostNote = () => {
     if (!updateNoteText.trim()) return;
-    try {
-      const res = await fetch('http://127.0.0.1:8000/api/post-project-update-note/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: selectedProjectForNote.id, note: updateNoteText })
+    dataProvider.postProjectUpdateNote({ project_id: selectedProjectForNote.id, note: updateNoteText })
+      .then(res => {
+        if (res.ok) {
+          showToast('Announcement note posted successfully!', 'success');
+          setShowNoteModal(false);
+          setUpdateNoteText('');
+          fetchData(true);
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to post announcement.');
+          });
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        showToast('Server connection failed.', 'error');
       });
-      if (res.ok) {
-        showToast('Announcement note posted successfully!', 'success');
-        setShowNoteModal(false);
-        setUpdateNoteText('');
-        fetchData(true);
-      } else {
-        showToast('Failed to post announcement.', 'error');
-      }
-    } catch (err) {
-      console.error(err);
-      showToast('Server connection failed.', 'error');
-    }
   };
 
-  const handleAddSprint = async (sprintData) => {
+  const handleAddSprint = (sprintData) => {
     if (!sprintData.name || !sprintData.start_date || !sprintData.end_date) {
       showToast('Please fill all sprint fields.', 'error');
       return;
@@ -310,34 +352,34 @@ const lastStatItem = {
       }
     }
 
-    try {
-      const res = await fetch('http://127.0.0.1:8000/api/request-additional-sprint/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: selectedProjectForSprint.id,
-          name: sprintData.name,
-          start_date: sprintData.start_date,
-          end_date: sprintData.end_date,
-          sprint_id: sprintData.sprint_id
-        })
+    dataProvider.requestAdditionalSprint({
+      project_id: selectedProjectForSprint.id,
+      name: sprintData.name,
+      start_date: sprintData.start_date,
+      end_date: sprintData.end_date,
+      sprint_id: sprintData.sprint_id
+    })
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => {
+            showToast(data.message || 'Sprint request submitted for PGM approval!', 'success');
+            setShowSprintModal(false);
+            setSprintName('');
+            setSprintStartDate('');
+            setSprintEndDate('');
+            setSprintIdToUpdate(null);
+            fetchData(true);
+          });
+        } else {
+          return res.json().then(data => {
+            showToast(data.error || 'Failed to submit sprint request.', 'error');
+          });
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        showToast('Server connection failed.', 'error');
       });
-      const data = await res.json();
-      if (res.ok) {
-        showToast(data.message || 'Sprint request submitted for PGM approval!', 'success');
-        setShowSprintModal(false);
-        setSprintName('');
-        setSprintStartDate('');
-        setSprintEndDate('');
-        setSprintIdToUpdate(null);
-        fetchData(true);
-      } else {
-        showToast(data.error || 'Failed to submit sprint request.', 'error');
-      }
-    } catch (err) {
-      console.error(err);
-      showToast('Server connection failed.', 'error');
-    }
   };
 
   const toggleRow = (id) => {
@@ -349,32 +391,32 @@ const lastStatItem = {
     setShowProjectForm(true);
   };
 
-  const handleStartWorking = async (pgm) => {
+  const handleStartWorking = (pgm) => {
     setIsStartWorkingWorkflow(true);
-    try {
-      // Fetch active projects to get latest sprint and team data for the project
-      const projRes = await fetch(`http://127.0.0.1:8000/api/get-active-projects/?username=${username}`);
-      if (projRes.ok) {
-        const projectsData = await projRes.json();
-        setMyProjects(projectsData);
-        
-        const projObj = projectsData.find(p => p.id === pgm.project_id);
-        if (projObj) {
-          setActiveProjectForTask(projObj);
-          setShowTaskModal(true);
+    dataProvider.getActiveProjects(username)
+      .then(projRes => {
+        if (projRes.ok) {
+          return projRes.json().then(projectsData => {
+            setMyProjects(projectsData);
+            const projObj = projectsData.find(p => p.id === pgm.project_id);
+            if (projObj) {
+              setActiveProjectForTask(projObj);
+              setShowTaskModal(true);
+            } else {
+              setActiveProjectForTask({ id: pgm.project_id, name: pgm.name });
+              setShowTaskModal(true);
+            }
+          });
         } else {
           setActiveProjectForTask({ id: pgm.project_id, name: pgm.name });
           setShowTaskModal(true);
         }
-      } else {
+      })
+      .catch(error => {
+        console.error("Error setting up start working:", error);
         setActiveProjectForTask({ id: pgm.project_id, name: pgm.name });
         setShowTaskModal(true);
-      }
-    } catch (error) {
-      console.error("Error setting up start working:", error);
-      setActiveProjectForTask({ id: pgm.project_id, name: pgm.name });
-      setShowTaskModal(true);
-    }
+      });
   };
 
   const handleCloseTaskModal = () => {
@@ -383,7 +425,7 @@ const lastStatItem = {
     setIsStartWorkingWorkflow(false);
   };
 
-  const handleCreateTasks = async (e) => {
+  const handleCreateTasks = (e) => {
     if (e) e.preventDefault();
     
     // Check fields for all tasks in tasksList
@@ -395,72 +437,81 @@ const lastStatItem = {
       }
     }
     
-    try {
-      // Create all tasks sequentially or concurrently
-      const createPromises = tasksList.map(task =>
-        fetch('http://127.0.0.1:8000/api/create-task/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: task.title,
-            assigned_to: task.assigned_to,
-            sprint_id: task.sprint_id,
-            due_date: task.due_date,
-            project_id: activeProjectForTask?.id,
-            priority: task.priority || 'Medium',
-            description: task.description || ''
-          })
-        })
-      );
-      
-      const responses = await Promise.all(createPromises);
-      const allOk = responses.every(res => res.ok);
-      
-      if (allOk) {
-        if (isStartWorkingWorkflow) {
-          // Send request to transition project status to In Progress
-          const startRes = await fetch('http://127.0.0.1:8000/api/start-project-execution/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ project_id: activeProjectForTask?.id })
-          });
-          const startData = await startRes.json();
-          if (startData.success) {
-            showToast('Project execution started with tasks created!', 'success');
+    // Create all tasks sequentially or concurrently using standard DataProvider and Promise.all
+    const createPromises = tasksList.map(task =>
+      dataProvider.createTask({
+        title: task.title,
+        assigned_to: task.assigned_to,
+        sprint_id: task.sprint_id,
+        due_date: task.due_date,
+        project_id: activeProjectForTask?.id,
+        priority: task.priority || 'Medium',
+        description: task.description || ''
+      })
+    );
+    
+    Promise.all(createPromises)
+      .then(responses => {
+        const allOk = responses.every(res => res.ok);
+        if (allOk) {
+          if (isStartWorkingWorkflow) {
+            dataProvider.startProjectExecution({ project_id: activeProjectForTask?.id })
+              .then(startRes => {
+                if (startRes.ok) {
+                  return startRes.json().then(startData => {
+                    if (startData.success) {
+                      showToast('Project execution started with tasks created!', 'success');
+                    } else {
+                      showToast('Tasks created, but failed to start execution: ' + startData.error, 'warning');
+                    }
+                  });
+                } else {
+                  showToast('Tasks created, but failed to start execution.', 'warning');
+                }
+              })
+              .catch(err => console.error("Error starting execution:", err))
+              .finally(() => {
+                setShowTaskModal(false);
+                setTasksList([{ title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' }]);
+                setIsStartWorkingWorkflow(false);
+                fetchData(true);
+              });
           } else {
-            showToast('Tasks created, but failed to start execution: ' + startData.error, 'warning');
+            showToast(`${tasksList.length} task(s) created successfully!`, 'success');
+            setShowTaskModal(false);
+            setTasksList([{ title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' }]);
+            setIsStartWorkingWorkflow(false);
+            fetchData(true);
           }
         } else {
-          showToast(`${tasksList.length} task(s) created successfully!`, 'success');
+          showToast('Failed to create one or more tasks.', 'error');
         }
-        
-        setShowTaskModal(false);
-        setTasksList([{ title: '', description: '', assigned_to: '', sprint_id: '', priority: 'Medium', due_date: '' }]);
-        setIsStartWorkingWorkflow(false);
-        fetchData(true);
-      } else {
-        showToast('Failed to create one or more tasks.', 'error');
-      }
-    } catch (err) {
-      console.error(err);
-      showToast('Connection failed. Check your server.', 'error');
-    }
+      })
+      .catch(err => {
+        console.error(err);
+        showToast('Connection failed. Check your server.', 'error');
+      });
   };
 
-  const handleLiveTrack = async (pgmId) => {
+  const handleLiveTrack = (pgmId) => {
     setLoadingStats(true);
-    try {
-      const res = await fetch(`http://127.0.0.1:8000/api/program-tracker/?program_id=${pgmId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSelectedProgramStats(data);
-        setShowTrackerModal(true);
-      }
-    } catch (err) {
-      console.error("Tracker error:", err);
-    } finally {
-      setLoadingStats(false);
-    }
+    dataProvider.programTracker(pgmId)
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => {
+            setSelectedProgramStats(data);
+            setShowTrackerModal(true);
+          });
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch tracker stats');
+          });
+        }
+      })
+      .catch(err => console.error("Tracker error:", err))
+      .finally(() => {
+        setLoadingStats(false);
+      });
   };
 
   const handleDownloadReport = () => {
@@ -492,25 +543,24 @@ const lastStatItem = {
     document.body.removeChild(a);
   };
 
-  const handleSubmitPlan = async (formData) => {
+  const handleSubmitPlan = (formData) => {
     const formattedTeam = formData.team.map(m => ({ userId: Number(m.userId), role: m.role, fte: m.fte }));
     const payload = { ...formData, team: formattedTeam, program_id: selectedProgram?.id, pm_username: username };
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/create-project-plan/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+    dataProvider.createProjectPlan(payload)
+      .then(response => {
+        if (response.ok) {
+          showToast('Project plan submitted successfully!', 'success');
+          setShowProjectForm(false);
+          fetchData(true);
+        } else {
+          return response.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to submit project plan.');
+          });
+        }
+      })
+      .catch(err => {
+        showToast('Connection failed. Check your server.', 'error');
       });
-      if (response.ok) {
-        showToast('Project plan submitted successfully!', 'success');
-        setShowProjectForm(false);
-        fetchData(true);
-      } else {
-        showToast('Failed to submit project plan.', 'error');
-      }
-    } catch (err) {
-      showToast('Connection failed. Check your server.', 'error');
-    }
   };
   return (
     <div style={layoutContainer}>

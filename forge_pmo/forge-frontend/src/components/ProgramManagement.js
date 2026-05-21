@@ -1,13 +1,24 @@
 import React, { useEffect, useState } from 'react';
+import { DataProvider } from '../services/DataProvider';
+import { openNotification } from '../utils/NotificationMessageMapping';
+
+const dataProvider = new DataProvider();
 
 const ProgramManagement = () => {
   const [programs, setPrograms] = useState([]);
   const [expandedProgram, setExpandedProgram] = useState(null);
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/programs/')
-      .then(res => res.json())
-      .then(data => setPrograms(data))
+    dataProvider.programs()
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => setPrograms(data));
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch programs');
+          });
+        }
+      })
       .catch(err => console.error("Error fetching programs:", err));
   }, []);
 

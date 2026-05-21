@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import ProgramManagement from './ProgramManagement';
+import { DataProvider } from '../services/DataProvider';
+import { openNotification } from '../utils/NotificationMessageMapping';
+
+const dataProvider = new DataProvider();
 
 // STEP 1: getStatusColor Function (Already added by you)
 const getStatusColor = (endDate) => {
@@ -30,9 +34,16 @@ const Dashboard = ({ user }) => {
 
   useEffect(() => {
     if (activeTab === 'Dashboard') {
-      fetch('http://127.0.0.1:8000/api/projects/')
-        .then(res => res.json())
-        .then(data => setStats(prev => ({ ...prev, projects: data.length })))
+      dataProvider.getProjects()
+        .then(res => {
+          if (res.ok) {
+            return res.json().then(data => setStats(prev => ({ ...prev, projects: data.length })));
+          } else {
+            return res.json().then(errorData => {
+              openNotification('error', errorData['message'] || 'Failed to fetch projects');
+            });
+          }
+        })
         .catch(err => console.error("Error fetching projects:", err));
     }
   }, [activeTab]);

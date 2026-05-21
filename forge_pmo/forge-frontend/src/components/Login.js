@@ -1,28 +1,29 @@
 import React, { useState } from 'react';
+import { DataProvider } from '../services/DataProvider';
+
+const dataProvider = new DataProvider();
 
 const Login = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     setErrorMsg('');
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/login/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+    dataProvider.login({ username, password })
+      .then(response => {
+        return response.json().then(data => {
+          if (data.success) {
+            onLogin(data.username, data.role, data.token);
+          } else {
+            setErrorMsg(' Invalid Username or Password! Please check your credentials.');
+          }
+        });
+      })
+      .catch(err => {
+        setErrorMsg(' Cannot connect to server. Please ensure the Django server is running.');
       });
-      const data = await response.json();
-      if (data.success) {
-        onLogin(data.username, data.role, data.token);
-      } else {
-        setErrorMsg(' Invalid Username or Password! Please check your credentials.');
-      }
-    } catch (err) {
-      setErrorMsg(' Cannot connect to server. Please ensure the Django server is running.');
-    }
   };
 
   return (

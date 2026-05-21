@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } from 'recharts';
+import { DataProvider } from '../services/DataProvider';
 import FocusMode from './common/FocusMode';
 import KanbanBoard from './common/KanbanBoard';
 import NotificationPanel from './common/NotificationPanel';
 import { Gantt, ViewMode } from 'gantt-task-react';
+import { openNotification } from '../utils/NotificationMessageMapping';
 import "gantt-task-react/dist/index.css";
+
+const dataProvider = new DataProvider();
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
@@ -61,23 +65,29 @@ const TMDashboard = ({ user, onLogout }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const prevNotificationsCount = useRef(0);
 
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const res = await fetch(`http://127.0.0.1:8000/api/get-notifications/?username=${user}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.length > prevNotificationsCount.current) {
-          const newCount = data.length - prevNotificationsCount.current;
-          for (let i = 0; i < newCount; i++) {
-            if (data[i]) {
-              showToast(`🔔 Notification: ${data[i].message}`, 'success');
+  const fetchNotifications = useCallback(() => {
+    dataProvider.getNotifications(user)
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => {
+            if (data.length > prevNotificationsCount.current) {
+              const newCount = data.length - prevNotificationsCount.current;
+              for (let i = 0; i < newCount; i++) {
+                if (data[i]) {
+                  showToast(`🔔 Notification: ${data[i].message}`, 'success');
+                }
+              }
             }
-          }
+            setNotifications(data);
+            prevNotificationsCount.current = data.length;
+          });
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch notifications');
+          });
         }
-        setNotifications(data);
-        prevNotificationsCount.current = data.length;
-      }
-    } catch (err) { console.error("Notif fetch error:", err); }
+      })
+      .catch(err => console.error("Notif fetch error:", err));
   }, [user]);
 
   const showToast = (msg, type = 'success') => {
@@ -85,60 +95,73 @@ const TMDashboard = ({ user, onLogout }) => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const fetchDashboardStats = useCallback(async () => {
-    try {
-      let url = `http://127.0.0.1:8000/api/get-dashboard-stats/?username=${user}`;
-      if (selectedProjectId) {
-          url += `&project_id=${selectedProjectId}`;
-      }
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
-      }
-    } catch (err) { console.error("Stats fetch error:", err); }
+  const fetchDashboardStats = useCallback(() => {
+    dataProvider.getDashboardStats(user, selectedProjectId)
+      .then(response => {
+        if (response.ok) {
+          return response.json().then(data => setStats(data));
+        } else {
+          return response.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch stats');
+          });
+        }
+      })
+      .catch(err => console.error("Stats fetch error:", err));
   }, [user, selectedProjectId]);
 
-  const fetchTasks = useCallback(async () => {
-    try {
-      const response = await fetch(`http://127.0.0.1:8000/api/get-kanban-tasks/?username=${user}`);
-      if (response.ok) {
-        const data = await response.json();
-        setTasks(data);
+  const fetchTasks = useCallback(() => {
+    dataProvider.getKanbanTasks(user)
+      .then(response => {
+        if (response.ok) {
+          return response.json().then(data => {
+            setTasks(data);
 
-        const projMap = {};
-        data.forEach(item => {
-          if (!projMap[item.project_name]) {
-            projMap[item.project_name] = {
-              name: item.project_name,
-              pm: item.project_manager,
-              sprint: item.sprint_name,
-              program_document: item.program_document
-            };
-          }
-        });
-        const uniqueProjects = Object.values(projMap);
-        setProjects(uniqueProjects);
-        
-        // --- NOTIFICATION LOGIC ---
-        const savedProjectCount = localStorage.getItem(`forge_projects_${user}`);
-        if (savedProjectCount !== null) {
-            const diff = uniqueProjects.length - parseInt(savedProjectCount, 10);
-            if (diff > 0) {
-                setNewProjectCount(diff);
+            const projMap = {};
+            data.forEach(item => {
+              if (!projMap[item.project_name]) {
+                projMap[item.project_name] = {
+                  name: item.project_name,
+                  pm: item.project_manager,
+                  sprint: item.sprint_name,
+                  program_document: item.program_document
+                };
+              }
+            });
+            const uniqueProjects = Object.values(projMap);
+            setProjects(uniqueProjects);
+            
+            // --- NOTIFICATION LOGIC ---
+            const savedProjectCount = localStorage.getItem(`forge_projects_${user}`);
+            if (savedProjectCount !== null) {
+                const diff = uniqueProjects.length - parseInt(savedProjectCount, 10);
+                if (diff > 0) {
+                    setNewProjectCount(diff);
+                }
             }
+            localStorage.setItem(`forge_projects_${user}`, uniqueProjects.length);
+          });
+        } else {
+          return response.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch tasks');
+          });
         }
-        localStorage.setItem(`forge_projects_${user}`, uniqueProjects.length);
-      }
-    } catch (err) { console.error("Fetch error:", err); }
-    finally { setLoading(false); }
+      })
+      .catch(err => console.error("Fetch error:", err))
+      .finally(() => setLoading(false));
   }, [user]);
 
-  const fetchUserProfile = useCallback(async () => {
-    try {
-      const res = await fetch(`http://127.0.0.1:8000/api/get-user-profile/?username=${user}`);
-      if (res.ok) setProfileData(await res.json());
-    } catch (err) { console.error("Profile fetch error:", err); }
+  const fetchUserProfile = useCallback(() => {
+    dataProvider.fetchProfileDetails(user)
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => setProfileData(data));
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch user profile');
+          });
+        }
+      })
+      .catch(err => console.error("Profile fetch error:", err));
   }, [user]);
 
   useEffect(() => {
@@ -208,19 +231,20 @@ const TMDashboard = ({ user, onLogout }) => {
     return () => clearInterval(timerRef.current);
   }, [isTimerRunning, timerLeft, focusPhase]);
 
-  const clearNotifications = async () => {
-      try {
-        await fetch('http://127.0.0.1:8000/api/mark-notifications-read/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: user })
-        });
-        setNotifications([]);
-        setNewProjectCount(0);
-        prevNotificationsCount.current = 0;
-      } catch (err) {
-        console.error("Error clearing notifications:", err);
-      }
+  const clearNotifications = () => {
+    dataProvider.markNotificationsRead({ username: user })
+      .then(res => {
+        if (res.ok) {
+          setNotifications([]);
+          setNewProjectCount(0);
+          prevNotificationsCount.current = 0;
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to clear notifications');
+          });
+        }
+      })
+      .catch(err => console.error("Error clearing notifications:", err));
   };
 
   const toggleTimer = () => setIsTimerRunning(!isTimerRunning);
@@ -269,74 +293,75 @@ const TMDashboard = ({ user, onLogout }) => {
     setDailyInput(prev => ({ ...prev, [taskId]: parseFloat(hours || 0) }));
   };
 
-  const saveDailyLog = async () => {
+  const saveDailyLog = () => {
     const taskIdsToUpdate = Object.keys(dailyInput).filter(id => dailyInput[id] > 0);
     if (taskIdsToUpdate.length === 0) {
         showToast('Please enter hours for at least one task.', 'warning');
         return;
     }
     setLoading(true);
-    try {
-      const updates = taskIdsToUpdate.map(taskId => {
-        return fetch('http://127.0.0.1:8000/api/log-daily-effort/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            task_id: taskId,
-            hours_added: dailyInput[taskId],
-            username: user,
-            log_date: new Date().toISOString().split('T')[0]
-          })
-        });
+    const updates = taskIdsToUpdate.map(taskId => {
+      return dataProvider.logDailyEffort({
+          task_id: taskId,
+          hours_added: dailyInput[taskId],
+          username: user,
+          log_date: new Date().toISOString().split('T')[0]
       });
-      const results = await Promise.all(updates);
-      const allOk = results.every(res => res.ok);
-      if (allOk) {
-          showToast(' Daily Effort Saved Successfully!', 'success');
-          setDailyInput({});
-          setFocusHistory({});
-          await fetchTasks();
-          await fetchDashboardStats();
-      } else {
-          const errorData = await results[0].json();
-          showToast(` Error: ${errorData.message || 'Failed to save effort'}`, 'error');
-      }
-    } catch (err) {
-        showToast(' Server connection failed.', 'error');
-    } finally {
-        setLoading(false);
-    }
+    });
+    Promise.all(updates)
+      .then(results => {
+        const allOk = results.every(res => res.ok);
+        if (allOk) {
+            showToast(' Daily Effort Saved Successfully!', 'success');
+            setDailyInput({});
+            setFocusHistory({});
+            fetchTasks();
+            fetchDashboardStats();
+        } else {
+            return results[0].json().then(errorData => {
+              openNotification('error', errorData['message'] || 'Failed to save daily effort');
+            });
+        }
+      })
+      .catch(err => {
+          showToast(' Server connection failed.', 'error');
+      })
+      .finally(() => {
+          setLoading(false);
+      });
   };
 
-  const updateSprintStatus = async (sprintId, newStatus) => {
+  const updateSprintStatus = (sprintId, newStatus) => {
     if (!sprintId) return;
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/update-sprint-status/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sprint_id: sprintId, status: newStatus })
-      });
-      if (response.ok) {
-        await fetchTasks();
-        await fetchDashboardStats();
-        showToast(` Sprint is now ${newStatus}`, 'success');
-      }
-    } catch (err) { console.error(err); }
-  };
-
-  const updateStatus = async (taskId, newStatus) => {
-    try {
-     const response = await fetch('http://127.0.0.1:8000/api/update-task-status-with-tracker/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task_id: taskId, status: newStatus })
-      });
-      if (response.ok) {
+    dataProvider.updateSprintStatus({ sprint_id: sprintId, status: newStatus })
+      .then(response => {
+        if (response.ok) {
           fetchTasks();
           fetchDashboardStats();
-          showToast(`Task moved to ${newStatus}`, 'success');
-      }
-    } catch (err) { console.error(err); }
+          showToast(` Sprint is now ${newStatus}`, 'success');
+        } else {
+          return response.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to update sprint status');
+          });
+        }
+      })
+      .catch(err => console.error(err));
+  };
+
+  const updateStatus = (taskId, newStatus) => {
+    dataProvider.updateTaskStatusWithTracker({ task_id: taskId, status: newStatus })
+      .then(response => {
+        if (response.ok) {
+            fetchTasks();
+            fetchDashboardStats();
+            showToast(`Task moved to ${newStatus}`, 'success');
+        } else {
+            return response.json().then(errorData => {
+              openNotification('error', errorData['message'] || 'Failed to update task status');
+            });
+        }
+      })
+      .catch(err => console.error(err));
   };
 
   const currentProjectTasks = tasks.filter(t => t.project_name === selectedProjectId);

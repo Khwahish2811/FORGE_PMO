@@ -4,6 +4,8 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
 import ProgramTrackerModal from './common/ProgramTrackerModal';
 import ResourceAnalytics from './common/ResourceAnalytics';
 import NotificationPanel from './common/NotificationPanel';
+import { DataProvider } from '../services/DataProvider';
+import { openNotification } from '../utils/NotificationMessageMapping';
 import {
   layoutContainer, sidebarStyle, sidebarScrollArea, logoBox, sbItem, activeSbItem,
   topHeaderStyle, mainContentStyle, logoutBtnSide, cardGrid, summCard, sectionTitle,
@@ -20,6 +22,8 @@ import UserProfileModal from './common/UserProfileModal';
 import PGMProgramImportModal from './pgm/PGMProgramImportModal';
 import PGMWorkingPrograms from './pgm/PGMWorkingPrograms';
 import PGMPlanReview from './pgm/PGMPlanReview';
+
+const dataProvider = new DataProvider();
 
 
 // Helper function for health status colors
@@ -93,112 +97,149 @@ const PGMDashboard = ({ username, onLogout }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [expandedResource, setExpandedResource] = useState(null);
-  const fetchNotifications = useCallback(async () => {
-    try {
-        const res = await fetch(`http://127.0.0.1:8000/api/get-notifications/?username=${username}`);
+  const fetchNotifications = useCallback(() => {
+    dataProvider.getNotifications(username)
+      .then(res => {
         if (res.ok) {
-            const data = await res.json();
+          return res.json().then(data => {
             if (data.length > prevNotificationsCount.current) {
-                const newCount = data.length - prevNotificationsCount.current;
-                for (let i = 0; i < newCount; i++) {
-                    if (data[i]) {
-                        showToast(`🔔 Notification: ${data[i].message}`, 'success');
-                    }
+              const newCount = data.length - prevNotificationsCount.current;
+              for (let i = 0; i < newCount; i++) {
+                if (data[i]) {
+                  showToast(`🔔 Notification: ${data[i].message}`, 'success');
                 }
+              }
             }
             setNotifications(data);
             prevNotificationsCount.current = data.length;
+          });
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch notifications');
+          });
         }
-    } catch (err) { console.error("Notification fetch error:", err); }
+      })
+      .catch(err => console.error("Notification fetch error:", err));
   }, [username, showToast]);
 
-  const markRead = async () => {
-      try {
-          await fetch('http://127.0.0.1:8000/api/mark-notifications-read/', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username })
-          });
+  const markRead = () => {
+    dataProvider.markNotificationsRead({ username })
+      .then(res => {
+        if (res.ok) {
           setNotifications([]);
-      } catch (err) { console.error("Mark read error:", err); }
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to mark notifications read');
+          });
+        }
+      })
+      .catch(err => console.error("Mark read error:", err));
   };
 
   // --- 1. Fetch Data ---
-  const fetchData = useCallback(async () => {
-    try {
-      const progRes = await fetch('http://127.0.0.1:8000/api/get-all-programs/');
-      if (progRes.ok) setPrograms(await progRes.json());
-
-      const pmRes = await fetch('http://127.0.0.1:8000/api/get-project-managers/');
-      if (pmRes.ok) setPmList(await pmRes.json());
-
-      const pendingRes = await fetch('http://127.0.0.1:8000/api/get-pending-projects/');
-      if (pendingRes.ok) {
-        const data = await pendingRes.json();
-        setPendingProjects(data);
+  const fetchData = useCallback(() => {
+    Promise.all([
+      dataProvider.getAllProgramsPGM(),
+      dataProvider.getProjectManagers(),
+      dataProvider.getPendingProjects()
+    ])
+    .then(([progRes, pmRes, pendingRes]) => {
+      if (progRes.ok) {
+        progRes.json().then(data => setPrograms(data));
+      } else {
+        openNotification('error', 'Failed to fetch programs');
       }
+
+      if (pmRes.ok) {
+        pmRes.json().then(data => setPmList(data));
+      } else {
+        openNotification('error', 'Failed to fetch Project Managers list');
+      }
+
+      if (pendingRes.ok) {
+        pendingRes.json().then(data => setPendingProjects(data));
+      } else {
+        openNotification('error', 'Failed to fetch pending projects');
+      }
+
       fetchPendingSprints();
-    } catch (err) {
-      console.error("Fetch fail:", err);
-    }
+    })
+    .catch(err => console.error("Fetch fail:", err))
+    .finally(() => {
+      setLoading(false);
+    });
   }, []);
 
 
-  const fetchPendingSprints = useCallback(async () => {
-    try {
-      const res = await fetch('http://127.0.0.1:8000/api/get-pending-additional-sprints/');
-      if (res.ok) setPendingSprints(await res.json());
-    } catch (err) { console.error("Error fetching pending sprints:", err); }
+  const fetchPendingSprints = useCallback(() => {
+    dataProvider.getPendingAdditionalSprints()
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => setPendingSprints(data));
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch pending sprints');
+          });
+        }
+      })
+      .catch(err => console.error("Error fetching pending sprints:", err));
   }, []);
 
-  const handleReviewSprintSubmit = async (decision) => {
+  const handleReviewSprintSubmit = (decision) => {
     if (decision === 'Returned' && !sprintReturnNote.trim()) {
       showToast('Please provide feedback notes when returning a sprint.', 'error');
       return;
     }
-    try {
-      const res = await fetch('http://127.0.0.1:8000/api/review-additional-sprint/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sprint_id: selectedSprintReview.sprint_id,
-          decision: decision,
-          return_note: sprintReturnNote
-        })
+    dataProvider.reviewAdditionalSprint({
+      sprint_id: selectedSprintReview.sprint_id,
+      decision: decision,
+      return_note: sprintReturnNote
+    })
+      .then(res => {
+        if (res.ok) {
+          showToast(decision === 'Approved' ? 'Sprint approved successfully!' : 'Sprint returned to PM with notes.', 'success');
+          setShowSprintReviewModal(false);
+          setSprintReturnNote('');
+          fetchData();
+          fetchPendingSprints();
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to review sprint.');
+          });
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        showToast('Server connection failed.', 'error');
       });
-      if (res.ok) {
-        showToast(decision === 'Approved' ? 'Sprint approved successfully!' : 'Sprint returned to PM with notes.', 'success');
-        setShowSprintReviewModal(false);
-        setSprintReturnNote('');
-        fetchData();
-        fetchPendingSprints();
-      } else {
-        showToast('Failed to review sprint.', 'error');
-      }
-    } catch (err) {
-      console.error(err);
-      showToast('Server connection failed.', 'error');
-    }
   };
 
-  const fetchResources = useCallback(async () => {
-    try {
-      const res = await fetch('http://127.0.0.1:8000/api/get-all-resources/');
-      if (res.ok) {
-        const data = await res.json();
-        setResources(data);
-      }
-    } catch (err) {
-      console.error("Resources fetch error:", err);
-    }
+  const fetchResources = useCallback(() => {
+    dataProvider.getAllResources()
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => setResources(data));
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch resources');
+          });
+        }
+      })
+      .catch(err => console.error("Resources fetch error:", err));
   }, []);
 
-  const fetchUserProfile = useCallback(async () => {
-
-    try {
-      const res = await fetch(`http://127.0.0.1:8000/api/get-user-profile/?username=${username}`);
-      if (res.ok) setProfileData(await res.json());
-    } catch (err) { console.error("Profile fetch error:", err); }
+  const fetchUserProfile = useCallback(() => {
+    dataProvider.fetchProfileDetails(username)
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => setProfileData(data));
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to fetch user profile');
+          });
+        }
+      })
+      .catch(err => console.error("Profile fetch error:", err));
   }, [username]);
 
   useEffect(() => {
@@ -221,41 +262,40 @@ const PGMDashboard = ({ username, onLogout }) => {
 
 
   // --- 2. Action Handlers (Original Functions Preserved) ---
-  const handleAssignPM = async (programId) => {
+  const handleAssignPM = (programId) => {
     const pmId = selectedPMs[programId];
     if (!pmId) { showToast(' Please select a PM first!', 'warning'); return; }
-    try {
-      const res = await fetch('http://127.0.0.1:8000/api/assign-pm/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ program_id: programId, pm_id: pmId, manager_name: username })
-      });
-      if (res.ok) {
-        showToast(' Project Manager assigned successfully!', 'success');
-        fetchData();
-      }
-    } catch (err) { showToast(' Connection error. Please try again.', 'error'); }
+    dataProvider.assignPM({ program_id: programId, pm_id: pmId, manager_name: username })
+      .then(res => {
+        if (res.ok) {
+          showToast(' Project Manager assigned successfully!', 'success');
+          fetchData();
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to assign Project Manager.');
+          });
+        }
+      })
+      .catch(err => showToast(' Connection error. Please try again.', 'error'));
   };
 
-  const handleReviewAction = async (projectId, decision) => {
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/approve-project-plan/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: projectId, decision: decision })
-      });
-      if (response.ok) {
-        showToast(` Project ${decision === 'approve' ? 'Approved' : 'Rejected'} successfully!`, decision === 'approve' ? 'success' : 'warning');
-        setShowReviewModal(false);
-        fetchData();
-      } else {
-        const errorData = await response.json();
-        showToast(' Error: ' + (errorData.error || 'Action failed'), 'error');
-      }
-    } catch (err) { showToast(' Failed to connect to the server.', 'error'); }
+  const handleReviewAction = (projectId, decision) => {
+    dataProvider.reviewProjectPlan({ project_id: projectId, decision: decision })
+      .then(response => {
+        if (response.ok) {
+          showToast(` Project ${decision === 'approve' ? 'Approved' : 'Rejected'} successfully!`, decision === 'approve' ? 'success' : 'warning');
+          setShowReviewModal(false);
+          fetchData();
+        } else {
+          return response.json().then(errorData => {
+            showToast(' Error: ' + (errorData.error || 'Action failed'), 'error');
+          });
+        }
+      })
+      .catch(err => showToast(' Failed to connect to the server.', 'error'));
   };
 
-  const handleCreateProgram = async (e) => {
+  const handleCreateProgram = (e) => {
     e.preventDefault();
     const data = new FormData();
     data.append('name', formData.name);
@@ -264,18 +304,20 @@ const PGMDashboard = ({ username, onLogout }) => {
     data.append('end_date', formData.end_date);
     if (formData.document) { data.append('document', formData.document); }
 
-    try {
-      const res = await fetch('http://127.0.0.1:8000/api/create-program/', {
-        method: 'POST',
-        body: data
-      });
-      if (res.ok) {
-        showToast(' Program created successfully!', 'success');
-        setShowModal(false);
-        setFormData({ name: '', description: '', start_date: '', end_date: '', document: null });
-        fetchData();
-      }
-    } catch (err) { showToast(' Error connecting to server!', 'error'); }
+    dataProvider.createProgram(data)
+      .then(res => {
+        if (res.ok) {
+          showToast(' Program created successfully!', 'success');
+          setShowModal(false);
+          setFormData({ name: '', description: '', start_date: '', end_date: '', document: null });
+          fetchData();
+        } else {
+          return res.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to create program');
+          });
+        }
+      })
+      .catch(err => showToast(' Error connecting to server!', 'error'));
   };
 
   // --- BULK IMPORT HANDLERS ---
@@ -290,7 +332,7 @@ const PGMDashboard = ({ username, onLogout }) => {
     document.body.removeChild(link);
   };
 
-  const handleFileChange = async (e) => {
+  const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     
@@ -301,96 +343,110 @@ const PGMDashboard = ({ username, onLogout }) => {
     setParsedRecords([]);
     setParseSummary(null);
     
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/parse-program-import/', {
-        method: 'POST',
-        body: fData
+    dataProvider.parseProgramImport(fData)
+      .then(response => {
+        if (response.ok) {
+          return response.json().then(data => {
+            setIsParsing(false);
+            if (data.success) {
+              setParsedRecords(data.records);
+              setParseSummary(data.summary);
+              showToast(`Successfully parsed spreadsheet! ${data.summary.valid_records} valid rows found.`, 'success');
+            } else {
+              showToast(data.error || 'Failed to parse file.', 'error');
+            }
+          });
+        } else {
+          setIsParsing(false);
+          return response.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to parse spreadsheet');
+          });
+        }
+      })
+      .catch(err => {
+        setIsParsing(false);
+        showToast('Server communication error during parsing.', 'error');
       });
-      
-      const data = await response.json();
-      setIsParsing(false);
-      if (data.success) {
-        setParsedRecords(data.records);
-        setParseSummary(data.summary);
-        showToast(`Successfully parsed spreadsheet! ${data.summary.valid_records} valid rows found.`, 'success');
-      } else {
-        showToast(data.error || 'Failed to parse file.', 'error');
-      }
-    } catch (err) {
-      setIsParsing(false);
-      showToast('Server communication error during parsing.', 'error');
-    }
   };
 
-  const handleApproveImport = async () => {
+  const handleApproveImport = () => {
     const validPrograms = parsedRecords.filter(r => r.is_valid);
     if (validPrograms.length === 0) return;
     
     setIsImporting(true);
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/commit-program-import/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ programs: validPrograms })
+    dataProvider.commitProgramImport({ programs: validPrograms })
+      .then(response => {
+        if (response.ok) {
+          return response.json().then(data => {
+            setIsImporting(false);
+            if (data.success) {
+              showToast(`Successfully imported ${data.created_count} programs!`, 'success');
+              setShowImportModal(false);
+              setParsedRecords([]);
+              setParseSummary(null);
+              fetchData();
+            } else {
+              showToast(data.error || 'Failed to commit import.', 'error');
+            }
+          });
+        } else {
+          setIsImporting(false);
+          return response.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Failed to commit import');
+          });
+        }
+      })
+      .catch(err => {
+        setIsImporting(false);
+        showToast('Server communication error during import.', 'error');
       });
-      
-      const data = await response.json();
-      setIsImporting(false);
-      if (data.success) {
-        showToast(`Successfully imported ${data.created_count} programs!`, 'success');
-        setShowImportModal(false);
-        setParsedRecords([]);
-        setParseSummary(null);
-        fetchData();
-      } else {
-        showToast(data.error || 'Failed to commit import.', 'error');
-      }
-    } catch (err) {
-      setIsImporting(false);
-      showToast('Server communication error during import.', 'error');
-    }
   };
 
-  const handleDecision = async (projectId, decision) => {
+  const handleDecision = (projectId, decision) => {
     if (decision === 'return' && !returnNote.trim()) {
       showToast('Please provide a reason for returning the project.', 'warning');
       return;
     }
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/approve-project-plan/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: projectId, decision: decision, return_note: returnNote })
+    dataProvider.reviewProjectPlan({ project_id: projectId, decision: decision, return_note: returnNote })
+      .then(response => {
+        if (response.ok) {
+          return response.json().then(data => {
+            showToast(`${data.message}`, decision === 'approve' ? 'success' : 'warning');
+            setShowReviewModal(false);
+            setReturnNote('');
+            fetchData();
+          });
+        } else {
+          return response.json().then(errorData => {
+            openNotification('error', errorData['message'] || 'Action failed');
+          });
+        }
+      })
+      .catch(error => {
+        console.error("Error:", error);
+        showToast('Action failed! Please try again.', 'error');
       });
-      const data = await response.json();
-      if (data.success) {
-        showToast(`${data.message}`, decision === 'approve' ? 'success' : 'warning');
-        setShowReviewModal(false);
-        setReturnNote('');
-        fetchData();
-      }
-    } catch (error) {
-      console.error("Error:", error);
-      showToast('Action failed! Please try again.', 'error');
-    }
   };
 
-  const handleLiveTrack = async (programId) => {
+  const handleLiveTrack = (programId) => {
     setLoadingStats(true);
-    try {
-      const res = await fetch(`http://127.0.0.1:8000/api/program-tracker/?program_id=${programId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSelectedProgramStats(data);
-        setShowTrackerModal(true);
-      } else {
-        showToast(' Tracker data not available for this program.', 'warning');
-      }
-    } catch (err) {
-      showToast(' Error fetching tracker data.', 'error');
-    } finally {
-      setLoadingStats(false);
-    }
+    dataProvider.programTracker(programId)
+      .then(res => {
+        if (res.ok) {
+          return res.json().then(data => {
+            setSelectedProgramStats(data);
+            setShowTrackerModal(true);
+          });
+        } else {
+          showToast(' Tracker data not available for this program.', 'warning');
+        }
+      })
+      .catch(err => {
+        showToast(' Error fetching tracker data.', 'error');
+      })
+      .finally(() => {
+        setLoadingStats(false);
+      });
   };
 
   const handleDownloadReport = () => {

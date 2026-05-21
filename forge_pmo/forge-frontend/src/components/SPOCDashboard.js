@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, LineChart, Line, CartesianGrid, BarChart, Bar, Legend } from 'recharts';
 import ProgramTrackerModal from './common/ProgramTrackerModal';
 import NotificationPanel from './common/NotificationPanel';
+import { DataProvider } from '../services/DataProvider';
+import { openNotification } from '../utils/NotificationMessageMapping';
 import {
   layoutContainer, sidebarStyle, sidebarScrollArea, logoBox, sbItem, activeSbItem,
   topHeaderStyle, mainContentStyle, logoutBtnSide, sectionTitle,
@@ -9,6 +11,8 @@ import {
   primBtn, reviewBtn, secBtn, assignBtn, miniSelect, modalOverlay, modalBox, lbl,
   valText, reviewGrid, miniTableContainer, miniTh, statusBadge
 } from './common/DashboardStyles';
+
+const dataProvider = new DataProvider();
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
@@ -48,79 +52,106 @@ const SPOCDashboard = ({ username, onLogout }) => {
   const [roleFilter, setRoleFilter] = useState('All');
   const [expandedResource, setExpandedResource] = useState(null);
 
-  const fetchNotifications = useCallback(async () => {
-    try {
-        const res = await fetch(`http://127.0.0.1:8000/api/get-notifications/?username=${username}`);
+  const fetchNotifications = useCallback(() => {
+    dataProvider.getNotifications(username)
+      .then((res) => {
         if (res.ok) {
-            const data = await res.json();
+          return res.json().then((data) => {
             if (data.length > prevNotificationsCount.current) {
-                const newCount = data.length - prevNotificationsCount.current;
-                for (let i = 0; i < newCount; i++) {
-                    if (data[i]) {
-                        showToast(`🔔 Notification: ${data[i].message}`, 'success');
-                    }
+              const newCount = data.length - prevNotificationsCount.current;
+              for (let i = 0; i < newCount; i++) {
+                if (data[i]) {
+                  showToast(`🔔 Notification: ${data[i].message}`, 'success');
                 }
+              }
             }
             setNotifications(data);
             prevNotificationsCount.current = data.length;
+          });
+        } else {
+          return res.json().then((errorData) => {
+            openNotification('error', errorData['message'] || 'Failed to fetch notifications');
+          });
         }
-    } catch (err) { console.error("Notification fetch error:", err); }
+      })
+      .catch((err) => console.error("Notification fetch error:", err));
   }, [username, showToast]);
 
-  const markRead = async () => {
-      try {
-          await fetch('http://127.0.0.1:8000/api/mark-notifications-read/', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username })
-          });
+  const markRead = () => {
+    dataProvider.markNotificationsRead({ username })
+      .then((res) => {
+        if (res.ok) {
           setNotifications([]);
-      } catch (err) { console.error("Mark read error:", err); }
+        } else {
+          return res.json().then((errorData) => {
+            openNotification('error', errorData['message'] || 'Failed to mark notifications read');
+          });
+        }
+      })
+      .catch((err) => console.error("Mark read error:", err));
   };
 
-  const fetchResources = useCallback(async () => {
-    try {
-      const res = await fetch('http://127.0.0.1:8000/api/get-all-resources/');
-      if (res.ok) {
-        const data = await res.json();
-        setResources(data);
-      }
-    } catch (err) {
-      console.error("Resources fetch error:", err);
-    }
+  const fetchResources = useCallback(() => {
+    dataProvider.getAllResources()
+      .then((res) => {
+        if (res.ok) {
+          return res.json().then((data) => {
+            setResources(data);
+          });
+        } else {
+          return res.json().then((errorData) => {
+            openNotification('error', errorData['message'] || 'Failed to fetch resources');
+          });
+        }
+      })
+      .catch((err) => console.error("Resources fetch error:", err));
   }, []);
 
-  const fetchData = useCallback(async (isSilent = false) => {
+  const fetchData = useCallback((isSilent = false) => {
     if (!isSilent) setLoading(true);
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/all-programs/');
-      if (response.ok) {
-        const data = await response.json();
-        setAllPrograms(data);
+    dataProvider.allProgramsSPOC()
+      .then((response) => {
+        if (response.ok) {
+          return response.json().then((data) => {
+            setAllPrograms(data);
 
-        if (activeTab === 'reports') {
-            setDisplayPrograms(data.filter(p => p.status?.toLowerCase() === 'approved' || p.status?.toLowerCase() === 'in progress'));
+            if (activeTab === 'reports') {
+                setDisplayPrograms(data.filter(p => p.status?.toLowerCase() === 'approved' || p.status?.toLowerCase() === 'in progress'));
+            } else {
+                const filtered = data.filter(p =>
+                  activeTab === 'pending'
+                    ? p.status?.toLowerCase() === 'pending'
+                    : (p.status?.toLowerCase() === 'approved' || p.status?.toLowerCase() === 'in progress' || p.status?.toLowerCase() === 'rejected')
+                );
+                setDisplayPrograms(filtered);
+            }
+          });
         } else {
-            const filtered = data.filter(p =>
-              activeTab === 'pending'
-                ? p.status?.toLowerCase() === 'pending'
-                : (p.status?.toLowerCase() === 'approved' || p.status?.toLowerCase() === 'in progress' || p.status?.toLowerCase() === 'rejected')
-            );
-            setDisplayPrograms(filtered);
+          return response.json().then((errorData) => {
+            openNotification('error', errorData['message'] || 'Failed to fetch programs');
+          });
         }
-      }
-    } catch (error) {
-      console.error("Fetch error:", error);
-    } finally {
-      setLoading(false);
-    }
+      })
+      .catch((error) => console.error("Fetch error:", error))
+      .finally(() => {
+        setLoading(false);
+      });
   }, [activeTab]);
 
-  const fetchUserProfile = useCallback(async () => {
-    try {
-      const res = await fetch(`http://127.0.0.1:8000/api/get-user-profile/?username=${username}`);
-      if (res.ok) setProfileData(await res.json());
-    } catch (err) { console.error("Profile fetch error:", err); }
+  const fetchUserProfile = useCallback(() => {
+    dataProvider.fetchProfileDetails(username)
+      .then((res) => {
+        if (res.ok) {
+          return res.json().then((data) => {
+            setProfileData(data);
+          });
+        } else {
+          return res.json().then((errorData) => {
+            openNotification('error', errorData['message'] || 'Failed to fetch user profile');
+          });
+        }
+      })
+      .catch((err) => console.error("Profile fetch error:", err));
   }, [username]);
 
   useEffect(() => {
@@ -142,36 +173,42 @@ const SPOCDashboard = ({ username, onLogout }) => {
   }, [fetchData, fetchUserProfile, fetchResources, fetchNotifications]);
 
 
-  const handleAction = async (programId, newStatus) => {
-    try {
-      const response = await fetch(`http://127.0.0.1:8000/api/update-program-status/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: programId, status: newStatus })
+  const handleAction = (programId, newStatus) => {
+    dataProvider.updateProgramStatus({ id: programId, status: newStatus })
+      .then((response) => {
+        if (response.ok) {
+          showToast(` Program ${newStatus} successfully!`, newStatus === 'Approved' ? 'success' : 'warning');
+          fetchData();
+        } else {
+          return response.json().then((errorData) => {
+            openNotification('error', errorData['message'] || 'Failed to update program status');
+          });
+        }
+      })
+      .catch((err) => {
+        showToast(' Backend error! Please try again.', 'error');
       });
-      if (response.ok) {
-        showToast(` Program ${newStatus} successfully!`, newStatus === 'Approved' ? 'success' : 'warning');
-        fetchData();
-      }
-    } catch (err) {
-      showToast(' Backend error! Please try again.', 'error');
-    }
   };
 
-  const handleLiveTrack = async (programId) => {
+  const handleLiveTrack = (programId) => {
     setLoadingStats(true);
-    try {
-      const res = await fetch(`http://127.0.0.1:8000/api/program-tracker/?program_id=${programId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSelectedProgramStats(data);
-        setShowTrackerModal(true);
-      }
-    } catch (err) {
-      console.error("Tracker error:", err);
-    } finally {
-      setLoadingStats(false);
-    }
+    dataProvider.programTracker(programId)
+      .then((res) => {
+        if (res.ok) {
+          return res.json().then((data) => {
+            setSelectedProgramStats(data);
+            setShowTrackerModal(true);
+          });
+        } else {
+          return res.json().then((errorData) => {
+            openNotification('error', errorData['message'] || 'Failed to get tracker details');
+          });
+        }
+      })
+      .catch((err) => console.error("Tracker error:", err))
+      .finally(() => {
+        setLoadingStats(false);
+      });
   };
 
   const handleDownloadReport = () => {
