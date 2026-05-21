@@ -98,8 +98,6 @@ const PMDashboard = ({ username, onLogout }) => {
   const [roleFilter, setRoleFilter] = useState('All');
   const [expandedResource, setExpandedResource] = useState(null);
 
-
-
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [selectedProjectForNote, setSelectedProjectForNote] = useState(null);
   const [updateNoteText, setUpdateNoteText] = useState('');
@@ -252,9 +250,6 @@ const lastStatItem = {
     ...industryStatItem,
     borderRight: 'none'
 };
-
-
-
   useEffect(() => {
     fetchData();
     fetchDashboardStats();
@@ -283,8 +278,6 @@ const lastStatItem = {
         window.removeEventListener('focus', handleFocus);
     };
   }, [fetchData, fetchDashboardStats, fetchNotifications, fetchUserProfile, fetchTeamPerformance, fetchResources]);
-
-
 
   const handlePostNote = async () => {
     if (!updateNoteText.trim()) return;
@@ -513,15 +506,6 @@ const lastStatItem = {
     document.body.removeChild(a);
   };
 
-
-
-
-
-
-
-
-
-
   const handleSubmitPlan = async (formData) => {
     const formattedTeam = formData.team.map(m => ({ userId: Number(m.userId), role: m.role, fte: m.fte }));
     const payload = { ...formData, team: formattedTeam, program_id: selectedProgram?.id, pm_username: username };
@@ -542,8 +526,6 @@ const lastStatItem = {
       showToast('Connection failed. Check your server.', 'error');
     }
   };
-
-
   return (
     <div style={layoutContainer}>
       
@@ -552,8 +534,6 @@ const lastStatItem = {
         onClose={() => setShowProfileModal(false)}
         profileData={profileData}
       />
-
-      
       {/* TOAST NOTIFICATION */}
       {toastMessage && (
         <div style={{
@@ -667,8 +647,6 @@ const lastStatItem = {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#1B3A6B' }}>Project Execution & Task Management</h3>
                   </div>
-
-
                   <PMOngoingWorkspace
                     myProjects={myProjects}
                     expandedProjectId={expandedProjectId}

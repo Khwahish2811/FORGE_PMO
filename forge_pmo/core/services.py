@@ -10,6 +10,7 @@ from django.db import transaction
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from core.models import Program, Project, Sprint, TeamMember, Task, DailyEffortLog, Profile, Notification
+from core.constants import RESOURCE_USERNAMES, ALL_USERNAMES
 
 logger = logging.getLogger(__name__)
 
@@ -818,7 +819,7 @@ class TeamService:
 
     @staticmethod
     def get_all_resources():
-        profiles = Profile.objects.select_related('user').filter(user__username__in=['khwahish_pm', 'shailja_pgm', 'yash_tm', 'priya_tm'])
+        profiles = Profile.objects.select_related('user').filter(user__username__in=RESOURCE_USERNAMES)
         resources_list = []
         today = timezone.now().date()
         
@@ -929,14 +930,14 @@ class TeamService:
     def get_project_managers():
         logger.info("TeamService: get_project_managers called")
         # pyrefly: ignore [missing-attribute]
-        users = User.objects.filter(profile__role='PM', username__in=['khwahish_pm', 'shailja_pgm', 'pranav_spoc', 'yash_tm', 'priya_tm']).select_related('profile')
+        users = User.objects.filter(profile__role='PM', username__in=ALL_USERNAMES).select_related('profile')
         return [{"id": user.id, "username": user.username} for user in users]
 
     @staticmethod
     def get_team_members():
         logger.info("TeamService: get_team_members called")
         # pyrefly: ignore [missing-attribute]
-        users = User.objects.filter(profile__role='TM', username__in=['khwahish_pm', 'shailja_pgm', 'pranav_spoc', 'yash_tm', 'priya_tm']).select_related('profile')
+        users = User.objects.filter(profile__role='TM', username__in=ALL_USERNAMES).select_related('profile')
         return [{"id": user.id, "username": user.username} for user in users]
 
 
