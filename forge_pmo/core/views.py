@@ -1,41 +1,23 @@
 import json
 import logging
 # pyrefly: ignore [untyped-import]
-from django.contrib.auth import authenticate
-# pyrefly: ignore [untyped-import]
-from django.contrib.auth.models import User
-# pyrefly: ignore [untyped-import]
 from django.views.decorators.csrf import csrf_exempt
-# pyrefly: ignore [untyped-import]
-from django.db import transaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
-from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
-from .models import Program, Project, Task, Sprint, TeamMember, DailyEffortLog, Profile, Notification
-from .serializers import ProjectSerializer, ProgramSerializer, TaskSerializer
-from .services import ProgramService, ProjectService, TaskService, SprintService, NotificationService, StatsService, TeamService
-
 # pyrefly: ignore [untyped-import]
 from django.http import JsonResponse
-# pyrefly: ignore [untyped-import]
-from django.db.models import Sum, Count, Q, Avg
-# pyrefly: ignore [untyped-import]
-from django.utils import timezone
-from datetime import timedelta, datetime
-# pyrefly: ignore [untyped-import]
-from django.shortcuts import get_object_or_404
-from datetime import date # Red line 1 fix
-# pyrefly: ignore [untyped-import]
-from django.db import models, transaction
-  # Validate according to active project models
-# pyrefly: ignore [untyped-import]
-from django.db.models import Count, Q
-# pyrefly: ignore [untyped-import]
-from django.db.models import Avg
+from datetime import date
 
-
+# Import all service classes
+from .services import (
+    ProgramService, ProjectService, TaskService, SprintService, 
+    NotificationService, StatsService, TeamService, ProfileService, 
+    AuthService, ProgramServiceExtensions, ProjectServiceExtensions, 
+    TeamServiceExtensions, TaskServiceExtensions, StatsServiceExtensions, 
+    SprintServiceExtensions, NotificationServiceExtensions
+)
 
 # Logger setup
 logger = logging.getLogger(__name__)
@@ -47,26 +29,16 @@ logger = logging.getLogger(__name__)
 @permission_classes([AllowAny])
 def login_api(request):
     try:
-        data = request.data
-        username = data.get('username')
-        password = data.get('password')
+        username = request.data.get('username')
+        password = request.data.get('password')
         if not username or not password:
             logger.warning("Login attempt with missing username or password")
             return Response({'success': False, 'message': 'Username/Password missing'}, status=400)
         
         logger.info(f"Login attempt for user: {username}")
-        user = authenticate(username=username, password=password)
-        if user is not None:
-            user_role = getattr(user.profile, 'role', 'TM')
-            token, created = Token.objects.get_or_create(user=user)
-            logger.info(f"Login successful for user: {username} (Role: {user_role})")
-            return Response({
-                'success': True,
-                'token': token.key,
-                'username': user.username,
-                'role': user_role
-            })
-        logger.warning(f"Login failed for user: {username} - Invalid Credentials")
+        result = AuthService.login(username, password)
+        if result:
+            return Response(result)
         return Response({'success': False, 'message': 'Invalid Credentials'}, status=401)
     except Exception as e:
         logger.error(f"LOGIN ERROR: {str(e)}")
@@ -77,10 +49,8 @@ def login_api(request):
 @api_view(['GET'])
 def get_all_programs(request):
     try:
-        # pyrefly: ignore [missing-attribute]
-        programs = Program.objects.all().order_by('-id')
-        serializer = ProgramSerializer(programs, many=True)
-        return Response(serializer.data, status=200)
+        data = ProgramService.get_all_programs()
+        return Response(data, status=200)
     except Exception as e:
         logger.error(f"ERROR IN GET_ALL_PROGRAMS: {str(e)}")
         return Response([], status=200)
@@ -90,16 +60,12 @@ def get_all_programs(request):
 def create_program(request):
     try:
         logger.info(f"views: create_program called by user {request.user}")
-        program = ProgramService.create_program(
+        result = ProgramService.create_program(
             data=request.data, 
             user=request.user, 
             document=request.FILES.get('document')
         )
-        return Response({
-            "success": True, 
-            "id": program.id, 
-            "document": str(program.document) if program.document else None
-        }, status=201)
+        return Response(result, status=201)
     except Exception as e:
         logger.error(f"views: CREATE PROGRAM ERROR: {str(e)}", exc_info=True)
         return Response({"success": False, "error": str(e)}, status=400)
@@ -138,7 +104,6 @@ def my_assigned_programs(request):
     try:
         username = request.query_params.get('username')
         logger.info(f"views: my_assigned_programs called for user {username}")
-        from core.services import ProgramServiceExtensions
         data = ProgramServiceExtensions.get_assigned_programs_for_pm(username, request)
         return Response(data)
     except Exception as e:
@@ -152,10 +117,8 @@ def get_active_projects(request):
         return Response([], status=200)
     try:
         logger.info(f"views: get_active_projects called for user {username}")
-        from core.services import ProjectServiceExtensions
-        latest_projects = ProjectServiceExtensions.get_active_projects_by_user(username)
-        serializer = ProjectSerializer(latest_projects, many=True)
-        return Response(serializer.data, status=200)
+        data = ProjectServiceExtensions.get_active_projects_by_user(username)
+        return Response(data, status=200)
     except Exception as e:
         logger.error(f"views: ACTIVE PROJECT ERROR: {str(e)}", exc_info=True)
         return Response([], status=200)
@@ -164,7 +127,6 @@ def get_active_projects(request):
 @api_view(['GET'])
 def get_project_managers(request):
     try:
-        from core.services import TeamService
         data = TeamService.get_project_managers()
         return Response(data, status=200)
     except Exception as e:
@@ -175,7 +137,6 @@ def get_project_managers(request):
 @api_view(['GET'])
 def get_team_members(request):
     try:
-        from core.services import TeamService
         data = TeamService.get_team_members()
         return Response(data, status=200)
     except Exception as e:
@@ -187,27 +148,23 @@ def get_team_members(request):
 @api_view(['POST'])
 def create_project_plan(request):
     try:
-        from core.services import ProjectService
         pm_username = request.data.get('pm_username')
-        project = ProjectService.create_project_plan(pm_username, request.data)
-        return Response({"success": True, "project_id": project.id}, status=201)
+        result = ProjectService.create_project_plan_with_payload(pm_username, request.data)
+        return Response(result, status=201)
     except Exception as e:
         logger.error(f"CREATE PLAN ERROR: {str(e)}")
         return Response({"error": str(e)}, status=500)
-
 
 # --- 5. PGM DASHBOARD (REVIEW) ---
 @api_view(['GET'])
 def get_pending_projects(request):
     try:
         logger.info("views: get_pending_projects called")
-        from core.services import ProjectServiceExtensions
         data = ProjectServiceExtensions.get_pending_projects()
         return Response(data, status=200)
     except Exception as e:
         logger.error(f"views: PENDING PROJECTS ERROR: {str(e)}", exc_info=True)
         return Response([], status=200)
-
 
 @api_view(['POST'])
 def approve_project_plan(request):
@@ -217,16 +174,11 @@ def approve_project_plan(request):
 
     try:
         logger.info(f"views: approve_project_plan called for {project_id} decision {decision}")
-        from core.services import ProjectServiceExtensions
-        project = ProjectServiceExtensions.approve_project_plan(project_id, decision, return_note)
-        return Response({"success": True, "message": f"Project is now {project.status}"})
-    except Project.DoesNotExist:
-        logger.error(f"views: Project {project_id} not found during review", exc_info=True)
-        return Response({"error": "Project not found"}, status=404)
+        result = ProjectServiceExtensions.approve_project_plan_with_payload(project_id, decision, return_note)
+        return Response(result)
     except Exception as e:
         logger.error(f"views: APPROVE PLAN ERROR: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=500)
-
 
 @api_view(['POST'])
 def start_project_execution(request):
@@ -247,44 +199,42 @@ def get_tm_projects(request):
     if not username: return JsonResponse([], safe=False)
     try:
         logger.info(f"views: get_tm_projects called for user {username}")
-        from core.services import TeamServiceExtensions
         assigned_projects = TeamServiceExtensions.get_tm_projects(username)
         return JsonResponse(assigned_projects, safe=False)
     except Exception as e:
         logger.error(f"views: TM PROJECTS ERROR: {str(e)}", exc_info=True)
         return JsonResponse([], safe=False)
 
-
 class ProjectViewSet(viewsets.ModelViewSet):
     # pyrefly: ignore [missing-attribute]
-    queryset = Project.objects.all()
-    serializer_class = ProjectSerializer
+    def get_queryset(self):
+        from .models import Project
+        return Project.objects.all()
 
+    def get_serializer_class(self):
+        from .serializers import ProjectSerializer
+        return ProjectSerializer
 
 # --- 6. TASK & KANBAN MANAGEMENT ---
-
 @api_view(['POST'])
 def create_task(request):
     try:
         logger.info(f"views: create_task called for project {request.data.get('project_id')}")
-        task = TaskService.create_task(request.data)
-        return Response({"success": True, "task_id": task.id}, status=201)
+        result = TaskService.create_task(request.data)
+        return Response(result, status=201)
     except Exception as e:
         logger.error(f"views: CREATE TASK ERROR: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=400)
-
 
 @api_view(['GET'])
 def get_kanban_tasks(request):
     username = request.query_params.get('username')
     try:
-        from core.services import TaskService
         task_data = TaskService.get_kanban_tasks(username)
         return Response(task_data, status=200)
     except Exception as e:
         logger.error(f"views: KANBAN ERROR: {str(e)}")
         return Response([], status=200)
-
 
 @api_view(['POST'])
 def update_task_status(request):
@@ -297,6 +247,7 @@ def update_task_status(request):
     except Exception as e:
         logger.error(f"views: UPDATE TASK STATUS ERROR: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=400)
+
 @api_view(['POST'])
 def log_daily_effort(request):
     try:
@@ -306,17 +257,11 @@ def log_daily_effort(request):
         log_date = request.data.get('log_date', date.today())
         
         logger.info(f"views: log_daily_effort called for task {task_id} by {username}")
-        task, remaining = TaskService.log_daily_effort(task_id, hours_added, username, log_date)
-        return Response({
-            "success": True,
-            "message": "Effort logged successfully!",
-            "total_logged": task.hours_logged,
-            "remaining": max(0, remaining)
-        }, status=200)
+        result = TaskService.log_daily_effort_with_payload(task_id, hours_added, username, log_date)
+        return Response(result, status=200)
     except Exception as e:
         logger.error(f"views: LOG EFFORT ERROR: {str(e)}", exc_info=True)
         return Response({"success": False, "message": str(e)}, status=400)
-
 
 @api_view(['POST'])
 def update_task_status_with_tracker(request):
@@ -327,39 +272,28 @@ def update_task_status_with_tracker(request):
             return Response({"error": "Missing task_id or status"}, status=400)
             
         logger.info(f"views: update_task_status_with_tracker called for task {task_id} -> {new_status}")
-        res = TaskService.update_task_status_with_tracker(task_id, new_status)
-        return Response({
-            "success": True,
-            "message": f"Task moved from {res['old_status']} to {res['task'].status}",
-            "new_status": res['task'].status,
-            "project_progress": res['progress_percent'],
-            "project_status": res['project_status']
-        })
+        result = TaskService.update_task_status_with_tracker_payload(task_id, new_status)
+        return Response(result)
     except Exception as e:
         logger.error(f"views: UPDATE TASK TRACKER ERROR: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=400)
     
-    
-
 @api_view(['GET'])
 def get_manager_team_tasks(request):
     manager_username = request.query_params.get('username')
     try:
         logger.info(f"views: get_manager_team_tasks called for PM {manager_username}")
-        from core.services import TaskServiceExtensions
         manager_data = TaskServiceExtensions.get_manager_team_tasks(manager_username)
         return Response(manager_data)
     except Exception as e:
         logger.error(f"views: GET MANAGER TEAM TASKS ERROR: {str(e)}", exc_info=True)
         return Response([], status=200)
 
-
 @api_view(['GET'])
 def get_dashboard_stats(request):
     username = request.query_params.get('username')
     project_name = request.query_params.get('project_id')
     try:
-        from core.services import StatsService
         stats_data = StatsService.get_dashboard_stats(username, project_name)
         return Response(stats_data, status=200)
     except Exception as e:
@@ -382,13 +316,11 @@ def get_program_tracker_stats(request):
     if not program_id:
         return Response({"error": "Program ID is required"}, status=400)
     try:
-        from core.services import StatsService
         stats_data = StatsService.get_program_tracker_stats(program_id)
         return Response(stats_data, status=200)
     except Exception as e:
         logger.error(f"TRACKER STATS ERROR: {str(e)}")
         return Response({"error": str(e)}, status=500)
-
 
 # --- 7. WORKING PROGRAMS API ---
 @api_view(['GET'])
@@ -396,7 +328,6 @@ def get_working_programs(request):
     username = request.query_params.get('username')
     try:
         logger.info(f"views: get_working_programs called for user {username}")
-        from core.services import ProgramServiceExtensions
         working_programs_data = ProgramServiceExtensions.get_working_programs_for_pm(username)
         return Response(working_programs_data, status=200)
     except Exception as e:
@@ -408,7 +339,6 @@ def program_tracker(request):
     program_id = request.query_params.get('program_id')
     try:
         logger.info(f"views: program_tracker called for program {program_id}")
-        from core.services import ProgramServiceExtensions
         data = ProgramServiceExtensions.get_tracker_data(program_id)
         return Response(data)
     except Exception as e:
@@ -424,7 +354,6 @@ def get_pm_dashboard_stats(request):
         return Response(stats_data)
     try:
         logger.info(f"views: get_pm_dashboard_stats called for PM {username}")
-        from core.services import StatsServiceExtensions
         stats_data = StatsServiceExtensions.get_pm_dashboard_stats(username)
         return Response(stats_data)
     except Exception as e:
@@ -453,12 +382,8 @@ def get_user_profile(request):
         return Response({"error": "Username required"}, status=400)
     try:
         logger.info(f"views: get_user_profile called for user {username}")
-        from core.services import ProfileService
         p_data = ProfileService.get_user_profile(username)
         return Response(p_data)
-    except User.DoesNotExist:
-        logger.error(f"views: User {username} not found for profile view", exc_info=True)
-        return Response({"error": "User not found"}, status=404)
     except Exception as e:
         logger.error(f"views: GET PROFILE ERROR: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=500)
@@ -470,7 +395,6 @@ def get_notifications(request):
         return Response([], status=200)
     try:
         logger.info(f"views: get_notifications called for recipient {username}")
-        from core.services import NotificationServiceExtensions
         data = NotificationServiceExtensions.get_notifications(username)
         return Response(data)
     except Exception as e:
@@ -489,13 +413,13 @@ def mark_notifications_read(request):
     except Exception as e:
         logger.error(f"views: MARK NOTIFICATIONS READ ERROR: {str(e)}", exc_info=True)
         return Response({"success": False, "error": str(e)}, status=400)
+
 @api_view(['GET'])
 def get_team_performance(request):
     manager_username = request.query_params.get('username')
     if not manager_username:
         return Response({"error": "Manager username required"}, status=400)
     try:
-        from core.services import TeamService
         performance_data = TeamService.get_team_performance(manager_username)
         return Response(performance_data)
     except Exception as e:
@@ -505,7 +429,6 @@ def get_team_performance(request):
 @api_view(['GET'])
 def get_all_resources(request):
     try:
-        from core.services import TeamService
         resources_list = TeamService.get_all_resources()
         return Response(resources_list)
     except Exception as e:
@@ -538,8 +461,8 @@ def request_additional_sprint(request):
         end_date = request.data.get('end_date')
         
         logger.info(f"views: request_additional_sprint called for project {project_id}")
-        sprint, action_msg = SprintService.request_additional_sprint(project_id, sprint_id, name, start_date, end_date)
-        return Response({"success": True, "message": f"Sprint successfully {action_msg} for PGM approval"})
+        result = SprintService.request_additional_sprint_with_payload(project_id, sprint_id, name, start_date, end_date)
+        return Response(result)
     except Exception as e:
         logger.error(f"views: REQUEST ADDITIONAL SPRINT ERROR: {str(e)}", exc_info=True)
         return Response({"error": str(e)}, status=400)
@@ -549,7 +472,6 @@ def request_additional_sprint(request):
 def get_pending_additional_sprints(request):
     try:
         logger.info("views: get_pending_additional_sprints called")
-        from core.services import SprintServiceExtensions
         sprint_list = SprintServiceExtensions.get_pending_additional_sprints()
         return Response(sprint_list)
     except Exception as e:
@@ -573,14 +495,10 @@ def review_additional_sprint(request):
 
 
 # --- AUTOMATED PROGRAM BULK IMPORT ENDPOINTS ---
-# pyrefly: ignore [untyped-import]
-import pandas as pd
-from datetime import datetime, date
 
 @api_view(['POST'])
 def parse_program_import(request):
     try:
-        from core.services import ProgramService
         uploaded_file = request.FILES.get('file')
         parsed_records, summary = ProgramService.parse_import(uploaded_file)
         return Response({
@@ -596,7 +514,6 @@ def parse_program_import(request):
 @api_view(['POST'])
 def commit_program_import(request):
     try:
-        from core.services import ProgramService
         programs_data = request.data.get('programs', [])
         created_programs, errors = ProgramService.commit_import(programs_data)
         return Response({

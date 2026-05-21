@@ -14,7 +14,33 @@ from core.constants import RESOURCE_USERNAMES, ALL_USERNAMES
 
 logger = logging.getLogger(__name__)
 
+class AuthService:
+    @staticmethod
+    def login(username, password):
+        logger.info(f"AuthService: login attempt for user: {username}")
+        from django.contrib.auth import authenticate
+        from rest_framework.authtoken.models import Token
+        user = authenticate(username=username, password=password)
+        if user is not None:
+            user_role = getattr(user.profile, 'role', 'TM')
+            token, created = Token.objects.get_or_create(user=user)
+            logger.info(f"AuthService: login successful for user: {username} (Role: {user_role})")
+            return {
+                'success': True,
+                'token': token.key,
+                'username': user.username,
+                'role': user_role
+            }
+        logger.warning(f"AuthService: login failed for user: {username} - Invalid Credentials")
+        return None
+
 class ProgramService:
+    @staticmethod
+    def get_all_programs():
+        from core.serializers import ProgramSerializer
+        programs = Program.objects.all().order_by('-id')
+        return ProgramSerializer(programs, many=True).data
+
     @staticmethod
     def create_program(data, user, document=None):
         logger.info(f"ProgramService: Creating program '{data.get('name')}' requested by {user}")
@@ -27,7 +53,11 @@ class ProgramService:
             status='Pending'
         )
         logger.info(f"ProgramService: Successfully created program {program.id}")
-        return program
+        return {
+            "success": True, 
+            "id": program.id, 
+            "document": str(program.document) if program.document else None
+        }
 
     @staticmethod
     def update_program_status(pgm_id, new_status):
@@ -282,6 +312,11 @@ class ProjectService:
             return project
 
     @staticmethod
+    def create_project_plan_with_payload(pm_username, data):
+        project = ProjectService.create_project_plan(pm_username, data)
+        return {"success": True, "project_id": project.id}
+
+    @staticmethod
     def approve_project_plan(project_id, decision, return_note=''):
         logger.info(f"ProjectService: approve_project_plan called for {project_id} with decision {decision}")
         project = get_object_or_404(Project, id=project_id)
@@ -372,7 +407,7 @@ class TaskService:
             message=f"PM_ADD: Task '{task.title}' was added by the Project Manager for project '{project.name}'."
         )
         logger.info(f"TaskService: create_task completed for task {task.id}")
-        return task
+        return {"success": True, "task_id": task.id}
 
     @staticmethod
     def update_task_status(task_id, new_status):
@@ -450,6 +485,27 @@ class TaskService:
             "old_status": old_status, 
             "progress_percent": progress_percent,
             "project_status": project.status
+        }
+
+    @staticmethod
+    def log_daily_effort_with_payload(task_id, hours_added, username, log_date):
+        task, remaining = TaskService.log_daily_effort(task_id, hours_added, username, log_date)
+        return {
+            "success": True,
+            "message": "Effort logged successfully!",
+            "total_logged": task.hours_logged,
+            "remaining": max(0, remaining)
+        }
+
+    @staticmethod
+    def update_task_status_with_tracker_payload(task_id, new_status):
+        res = TaskService.update_task_status_with_tracker(task_id, new_status)
+        return {
+            "success": True,
+            "message": f"Task moved from {res['old_status']} to {res['task'].status}",
+            "new_status": res['task'].status,
+            "project_progress": res['progress_percent'],
+            "project_status": res['project_status']
         }
 
     @staticmethod
@@ -549,6 +605,11 @@ class SprintService:
             )
             
         return sprint, action_msg
+
+    @staticmethod
+    def request_additional_sprint_with_payload(project_id, sprint_id, name, start_date, end_date):
+        sprint, action_msg = SprintService.request_additional_sprint(project_id, sprint_id, name, start_date, end_date)
+        return {"success": True, "message": f"Sprint successfully {action_msg} for PGM approval"}
 
     @staticmethod
     def review_additional_sprint(sprint_id, decision, return_note=''):
@@ -1165,7 +1226,8 @@ class ProjectServiceExtensions:
                 seen_programs.add(proj.program_id)
                 
         logger.info(f"ProjectServiceExtensions: Found {len(latest_projects)} unique active projects")
-        return latest_projects
+        from core.serializers import ProjectSerializer
+        return ProjectSerializer(latest_projects, many=True).data
 
     @staticmethod
     def get_pending_projects():
@@ -1234,6 +1296,11 @@ class ProjectServiceExtensions:
             logger.info("ProjectServiceExtensions: Notification dispatched successfully")
             
         return project
+
+    @staticmethod
+    def approve_project_plan_with_payload(project_id, decision, return_note):
+        project = ProjectServiceExtensions.approve_project_plan(project_id, decision, return_note)
+        return {"success": True, "message": f"Project is now {project.status}"}
 
 
 class TaskServiceExtensions:

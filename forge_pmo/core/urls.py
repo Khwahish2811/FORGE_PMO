@@ -6,7 +6,7 @@ from . import views
 from .views import get_program_tracker_stats
 
 router = DefaultRouter()
-router.register(r'projects', ProjectViewSet)
+router.register(r'projects', ProjectViewSet, basename='project')
 
 urlpatterns = [
     path('', include(router.urls)),
