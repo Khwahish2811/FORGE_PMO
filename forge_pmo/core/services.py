@@ -9,11 +9,65 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
-from core.models import Program, Project, Sprint, TeamMember, Task, DailyEffortLog, Profile
+from core.models import Program, Project, Sprint, TeamMember, Task, DailyEffortLog, Profile, Notification
 
 logger = logging.getLogger(__name__)
 
 class ProgramService:
+    @staticmethod
+    def create_program(data, user, document=None):
+        logger.info(f"ProgramService: Creating program '{data.get('name')}' requested by {user}")
+        program = Program.objects.create(
+            name=data.get('name'),
+            description=data.get('description'),
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            document=document,
+            status='Pending'
+        )
+        logger.info(f"ProgramService: Successfully created program {program.id}")
+        return program
+
+    @staticmethod
+    def update_program_status(pgm_id, new_status):
+        logger.info(f"ProgramService: Updating program {pgm_id} status to {new_status}")
+        program = get_object_or_404(Program, id=pgm_id)
+        program.status = new_status
+        program.save()
+        
+        pgm_users = User.objects.filter(profile__role='PGM')
+        for pgm_user in pgm_users:
+            if new_status == 'Approved':
+                Notification.objects.create(
+                    user=pgm_user,
+                    message=f"PROGRAM_APPROVED: The program request '{program.name}' has been APPROVED by the Business SPOC."
+                )
+            else:
+                Notification.objects.create(
+                    user=pgm_user,
+                    message=f"PROGRAM_REJECTED: The program request '{program.name}' was marked as '{new_status}' by the Business SPOC."
+                )
+        logger.info(f"ProgramService: Notifications sent for program {pgm_id}")
+        return program
+
+    @staticmethod
+    def assign_project_manager(program_id, pm_id, pgm_name_from_react):
+        logger.info(f"ProgramService: Assigning PM {pm_id} to program {program_id} by {pgm_name_from_react}")
+        program = get_object_or_404(Program, id=program_id)
+        pm_user = get_object_or_404(User, id=pm_id)
+        
+        program.project_manager_assigned = pm_user
+        program.manager_name = pgm_name_from_react
+        program.history_log = f"PM {pm_user.username} assigned by {pgm_name_from_react}."
+        program.save()
+        
+        Notification.objects.create(
+            user=pm_user,
+            message=f"NEW_ASSIGNMENT: You have been assigned as the Project Manager for program '{program.name}' by PGM {pgm_name_from_react}."
+        )
+        logger.info(f"ProgramService: Successfully assigned PM {pm_user.username} to program {program.id}")
+        return program
+
     @staticmethod
     def parse_import(uploaded_file):
         if not uploaded_file:
@@ -225,6 +279,290 @@ class ProjectService:
                 )
 
             return project
+
+    @staticmethod
+    def approve_project_plan(project_id, decision, return_note=''):
+        logger.info(f"ProjectService: approve_project_plan called for {project_id} with decision {decision}")
+        project = get_object_or_404(Project, id=project_id)
+
+        if decision == 'approve':
+            project.status = 'Approved'
+        elif decision == 'return':
+            project.status = 'Returned'
+            project.return_note = return_note
+        else:
+            project.status = 'Rejected'
+        project.save()
+        
+        pm_user = project.program.project_manager_assigned or project.created_by
+        if pm_user:
+            if decision == 'approve':
+                Notification.objects.create(
+                    user=pm_user,
+                    message=f"PLAN_APPROVED: The project plan for program '{project.program.name}' has been APPROVED by the Program Manager."
+                )
+            elif decision == 'return':
+                Notification.objects.create(
+                    user=pm_user,
+                    message=f"PLAN_RETURNED: The project plan for program '{project.program.name}' was returned for updates. Note: {return_note}"
+                )
+            else:
+                Notification.objects.create(
+                    user=pm_user,
+                    message=f"PLAN_REJECTED: The project plan for program '{project.program.name}' was REJECTED by the Program Manager."
+                )
+        logger.info(f"ProjectService: approve_project_plan completed for {project_id}")
+        return project
+
+    @staticmethod
+    def start_project_execution(project_id):
+        logger.info(f"ProjectService: start_project_execution called for {project_id}")
+        project = get_object_or_404(Project, id=project_id)
+        project.status = 'In Progress'
+        project.save()
+        
+        program = project.program
+        if program and program.status != 'In Progress':
+            program.status = 'In Progress'
+            program.save()
+        
+        logger.info(f"ProjectService: Execution started for project {project_id}")
+        return project
+
+    @staticmethod
+    def post_project_update_note(project_id, note):
+        logger.info(f"ProjectService: post_project_update_note called for {project_id}")
+        project = get_object_or_404(Project, id=project_id)
+        project.latest_update_note = note
+        project.save()
+        
+        team_members = TeamMember.objects.filter(project=project)
+        for tm in team_members:
+            Notification.objects.create(
+                user=tm.user,
+                message=f"PM_ADD: [Announcement] Project Manager updated: \"{note}\""
+            )
+            
+        logger.info(f"ProjectService: Notifications sent for project update {project_id}")
+        return project
+
+
+class TaskService:
+    @staticmethod
+    def create_task(data):
+        logger.info(f"TaskService: create_task called for project {data.get('project_id')} assignee {data.get('assigned_to')}")
+        project = get_object_or_404(Project, id=int(data.get('project_id')))
+        sprint = get_object_or_404(Sprint, id=int(data.get('sprint_id')))
+        assignee = get_object_or_404(User, username=data.get('assigned_to'))
+        
+        task = Task.objects.create(
+            project=project,
+            sprint=sprint,
+            assigned_to=assignee,
+            title=data.get('title'),
+            description=data.get('description', ''),
+            priority=data.get('priority', 'Medium'),
+            due_date=data.get('due_date'),
+            status='To Do'
+        )
+        
+        Notification.objects.create(
+            user=assignee,
+            message=f"PM_ADD: Task '{task.title}' was added by the Project Manager for project '{project.name}'."
+        )
+        logger.info(f"TaskService: create_task completed for task {task.id}")
+        return task
+
+    @staticmethod
+    def update_task_status(task_id, new_status):
+        logger.info(f"TaskService: update_task_status called for task {task_id} -> {new_status}")
+        task = get_object_or_404(Task, id=task_id)
+        task.status = new_status
+        task.save()
+        logger.info(f"TaskService: update_task_status completed for task {task_id}")
+        return task
+
+    @staticmethod
+    def log_daily_effort(task_id, hours_added, username, log_date):
+        logger.info(f"TaskService: log_daily_effort called for task {task_id} by {username}")
+        if hours_added <= 0:
+            raise ValueError("Hours must be greater than 0")
+            
+        with transaction.atomic():
+            task = Task.objects.select_for_update().get(id=task_id)
+            user = get_object_or_404(User, username=username)
+            
+            total_today = DailyEffortLog.objects.filter(
+                user=user,
+                log_date=log_date
+            ).aggregate(total=Sum('hours_added'))['total'] or 0
+            
+            if float(total_today) + hours_added > 24:
+                raise ValueError(f"Daily limit exceed! You already logged {total_today}h today.")
+                
+            task.hours_logged = float(task.hours_logged or 0) + hours_added
+            task.save()
+            
+            DailyEffortLog.objects.create(
+                task=task,
+                user=user,
+                hours_added=hours_added,
+                log_date=log_date
+            )
+            
+            remaining = float(task.total_estimated_hours or 0) - float(task.hours_logged or 0)
+            
+        logger.info(f"TaskService: log_daily_effort completed for task {task_id}")
+        return task, remaining
+
+    @staticmethod
+    def update_task_status_with_tracker(task_id, new_status):
+        logger.info(f"TaskService: update_task_status_with_tracker called for task {task_id} -> {new_status}")
+        task = get_object_or_404(Task, id=task_id)
+        old_status = task.status
+        task.status = new_status
+        task.last_moved_date = timezone.now().date()
+        
+        if new_status == 'In Progress' and not getattr(task, 'start_date', None):
+            task.start_date = timezone.now().date()
+            
+        task.save()
+        
+        project = task.project
+        if new_status == 'In Progress' and project.status != 'In Progress':
+            project.status = 'In Progress'
+            project.save()
+            
+            program = project.program
+            if program.status != 'In Progress':
+                program.status = 'In Progress'
+                program.save()
+                
+        project_tasks = Task.objects.filter(project=project)
+        total_count = project_tasks.count()
+        done_count = project_tasks.filter(status='Done').count()
+        progress_percent = (done_count / total_count * 100) if total_count > 0 else 0
+        
+        logger.info(f"TaskService: update_task_status_with_tracker completed for task {task_id}")
+        return {
+            "task": task, 
+            "old_status": old_status, 
+            "progress_percent": progress_percent,
+            "project_status": project.status
+        }
+
+
+class SprintService:
+    @staticmethod
+    def update_sprint_status(sprint_id, new_status):
+        logger.info(f"SprintService: update_sprint_status called for {sprint_id} -> {new_status}")
+        with transaction.atomic():
+            sprint = get_object_or_404(Sprint, id=sprint_id)
+            sprint.status = new_status
+            sprint.save()
+            
+            if new_status == 'In Progress':
+                project = sprint.project
+                if project.status != 'In Progress':
+                    project.status = 'In Progress'
+                    project.save()
+                
+                pm_user = project.created_by
+                if pm_user:
+                    Notification.objects.create(
+                        user=pm_user,
+                        message=f"🚀 Sprint '{sprint.name}' has been started by a Team Member for project '{project.name}'."
+                    )
+        logger.info(f"SprintService: update_sprint_status completed for sprint {sprint_id}")
+        return sprint
+
+    @staticmethod
+    def request_additional_sprint(project_id, sprint_id, name, start_date, end_date):
+        from datetime import datetime
+        logger.info(f"SprintService: request_additional_sprint called for project {project_id}")
+        project = get_object_or_404(Project, id=project_id)
+        
+        try:
+            sd = datetime.strptime(start_date, '%Y-%m-%d').date()
+            ed = datetime.strptime(end_date, '%Y-%m-%d').date()
+            if sd < project.start_date or ed > project.end_date:
+                raise ValueError(f"Sprint timeline must be within project timeline ({project.start_date} to {project.end_date})")
+        except ValueError as ve:
+            raise ValueError(str(ve))
+            
+        if sprint_id:
+            sprint = get_object_or_404(Sprint, id=sprint_id)
+            sprint.name = name
+            sprint.start_date = start_date
+            sprint.end_date = end_date
+            sprint.status = 'Pending Approval'
+            sprint.return_note = ''
+            sprint.save()
+            action_msg = "resubmitted"
+        else:
+            sprint = Sprint.objects.create(
+                project=project,
+                name=name,
+                start_date=start_date,
+                end_date=end_date,
+                status='Pending Approval'
+            )
+            action_msg = "requested"
+            
+        pgm_users = User.objects.filter(profile__role='PGM')
+        for pgm_user in pgm_users:
+            Notification.objects.create(
+                user=pgm_user,
+                message=f"SPRINT_UPDATE: Sprint '{name}' was {action_msg} for active project '{project.name}' by PM."
+            )
+            
+        return sprint, action_msg
+
+    @staticmethod
+    def review_additional_sprint(sprint_id, decision, return_note=''):
+        logger.info(f"SprintService: review_additional_sprint called for {sprint_id} -> {decision}")
+        sprint = get_object_or_404(Sprint, id=sprint_id)
+        
+        if decision == 'Approved':
+            sprint.status = 'Approved'
+            sprint.save()
+            
+            pm_user = sprint.project.created_by
+            if pm_user:
+                Notification.objects.create(
+                    user=pm_user,
+                    message=f"SPRINT_APPROVED: Additional sprint '{sprint.name}' for project '{sprint.project.name}' was approved by PGM."
+                )
+                
+            team_members = TeamMember.objects.filter(project=sprint.project)
+            for tm in team_members:
+                Notification.objects.create(
+                    user=tm.user,
+                    message=f"SPRINT_ADDED: New sprint '{sprint.name}' has been added to project '{sprint.project.name}'."
+                )
+        else:
+            sprint.status = 'Returned'
+            sprint.return_note = return_note
+            sprint.save()
+            
+            pm_user = sprint.project.created_by
+            if pm_user:
+                Notification.objects.create(
+                    user=pm_user,
+                    message=f"SPRINT_RETURNED: Additional sprint '{sprint.name}' for project '{sprint.project.name}' was returned. Note: {return_note}"
+                )
+                
+        logger.info(f"SprintService: review_additional_sprint completed for {sprint_id}")
+        return sprint
+
+
+class NotificationService:
+    @staticmethod
+    def mark_notifications_read(username):
+        logger.info(f"NotificationService: mark_notifications_read called for {username}")
+        updated_count = Notification.objects.filter(user__username=username, is_read=False).update(is_read=True)
+        logger.info(f"NotificationService: Marked {updated_count} notifications as read for {username}")
+        return updated_count
 
 
 class StatsService:

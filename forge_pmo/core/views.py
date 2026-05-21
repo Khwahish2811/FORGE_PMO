@@ -15,6 +15,8 @@ from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from .models import Program, Project, Task, Sprint, TeamMember, DailyEffortLog, Profile, Notification
 from .serializers import ProjectSerializer, ProgramSerializer, TaskSerializer
+from .services import ProgramService, ProjectService, TaskService, SprintService, NotificationService, StatsService, TeamService
+
 # pyrefly: ignore [untyped-import]
 from django.http import JsonResponse
 # pyrefly: ignore [untyped-import]
@@ -87,81 +89,47 @@ def get_all_programs(request):
 @api_view(['POST'])
 def create_program(request):
     try:
-        logger.info(f"Create program requested by user: {request.user}")
-        logger.debug(f"FILES: {request.FILES}")
-        logger.debug(f"DATA: {request.data}")
-        
-        program = Program.objects.create(
-            name=request.data.get('name'),
-            description=request.data.get('description'),
-            start_date=request.data.get('start_date'),
-            end_date=request.data.get('end_date'),
-            document=request.FILES.get('document'),
-            status='Pending'
+        logger.info(f"views: create_program called by user {request.user}")
+        program = ProgramService.create_program(
+            data=request.data, 
+            user=request.user, 
+            document=request.FILES.get('document')
         )
         return Response({
             "success": True, 
             "id": program.id, 
-            "document": str(program.document)
+            "document": str(program.document) if program.document else None
         }, status=201)
     except Exception as e:
-        logger.error(f"CREATE PROGRAM ERROR: {str(e)}")
+        logger.error(f"views: CREATE PROGRAM ERROR: {str(e)}", exc_info=True)
         return Response({"success": False, "error": str(e)}, status=400)
 
 
 @api_view(['POST'])
 def update_program_status(request):
-    pgm_id = request.data.get('id')
-    new_status = request.data.get('status')
     try:
-        # pyrefly: ignore [missing-attribute]
-        program = Program.objects.get(id=pgm_id)
-        program.status = new_status
-        program.save()
-        
-        # Notify PGM users about the SPOC's action
-        pgm_users = User.objects.filter(profile__role='PGM')
-        for pgm_user in pgm_users:
-            if new_status == 'Approved':
-                Notification.objects.create(
-                    user=pgm_user,
-                    message=f"PROGRAM_APPROVED: The program request '{program.name}' has been APPROVED by the Business SPOC."
-                )
-            else:
-                Notification.objects.create(
-                    user=pgm_user,
-                    message=f"PROGRAM_REJECTED: The program request '{program.name}' was marked as '{new_status}' by the Business SPOC."
-                )
-                
+        pgm_id = request.data.get('id')
+        new_status = request.data.get('status')
+        logger.info(f"views: update_program_status called for {pgm_id} -> {new_status}")
+        ProgramService.update_program_status(pgm_id, new_status)
         return Response({'success': True})
-    # pyrefly: ignore [missing-attribute]
-    except Program.DoesNotExist:
-        return Response({'success': False, 'message': 'Program not found'}, status=404)
+    except Exception as e:
+        logger.error(f"views: UPDATE PROGRAM STATUS ERROR: {str(e)}", exc_info=True)
+        return Response({'success': False, 'message': str(e)}, status=400)
 
 
 @api_view(['POST'])
 def assign_project_manager(request):
-    program_id = request.data.get('program_id')
-    pm_id = request.data.get('pm_id')
-    pgm_name_from_react = request.data.get('manager_name')
     try:
-        # pyrefly: ignore [missing-attribute]
-        program = Program.objects.get(id=program_id)
-        pm_user = User.objects.get(id=pm_id)
-        program.project_manager_assigned = pm_user
-        program.manager_name = pgm_name_from_react
-        program.history_log = f"PM {pm_user.username} assigned by {pgm_name_from_react}."
-        program.save()
-        
-        # Create a notification for the newly assigned PM
-        Notification.objects.create(
-            user=pm_user,
-            message=f"NEW_ASSIGNMENT: You have been assigned as the Project Manager for program '{program.name}' by PGM {pgm_name_from_react}."
-        )
-        
+        program_id = request.data.get('program_id')
+        pm_id = request.data.get('pm_id')
+        pgm_name = request.data.get('manager_name')
+        logger.info(f"views: assign_project_manager called for program {program_id} PM {pm_id}")
+        ProgramService.assign_project_manager(program_id, pm_id, pgm_name)
         return Response({"success": True})
     except Exception as e:
-        return Response({"success": False, "error": str(e)}, status=404)
+        logger.error(f"views: ASSIGN PM ERROR: {str(e)}", exc_info=True)
+        return Response({"success": False, "error": str(e)}, status=400)
 
 
 # --- 3. PM & TM DASHBOARD DATA ---
@@ -360,22 +328,15 @@ def approve_project_plan(request):
 
 @api_view(['POST'])
 def start_project_execution(request):
-    project_id = request.data.get('project_id')
     try:
-        project = Project.objects.get(id=project_id)
-        project.status = 'In Progress'
-        project.save()
+        project_id = request.data.get('project_id')
+        logger.info(f"views: start_project_execution called for {project_id}")
         
-        program = project.program
-        if program and program.status != 'In Progress':
-            program.status = 'In Progress'
-            program.save()
-            
+        ProjectService.start_project_execution(project_id)
         return Response({"success": True, "message": "Project execution started"})
-    except Project.DoesNotExist:
-        return Response({"error": "Project not found"}, status=404)
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        logger.error(f"views: START PROJECT EXECUTION ERROR: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=400)
 
 # --- TM PROJECTS FIX ---
 @api_view(['GET'])
@@ -410,40 +371,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
 @api_view(['POST'])
 def create_task(request):
-    data = request.data
     try:
-        # pyrefly: ignore [missing-attribute]
-        project = Project.objects.get(id=int(data.get('project_id')))
-        # pyrefly: ignore [missing-attribute]
-        sprint = Sprint.objects.get(id=int(data.get('sprint_id')))
-        assignee = User.objects.get(username=data.get('assigned_to'))
-
-        # pyrefly: ignore [missing-attribute]
-        task = Task.objects.create(
-            project=project,
-            sprint=sprint,
-            assigned_to=assignee,
-            title=data.get('title'),
-            description=data.get('description', ''),
-            priority=data.get('priority', 'Medium'),
-            due_date=data.get('due_date'),
-            status='To Do'
-        )
-        # Create PM addition alert notification
-
-        Notification.objects.create(
-
-            user=assignee,
-
-            message=f"PM_ADD: Task '{task.title}' was added by the Project Manager for project '{project.name}'."
-
-        )
-
-
+        logger.info(f"views: create_task called for project {request.data.get('project_id')}")
+        task = TaskService.create_task(request.data)
         return Response({"success": True, "task_id": task.id}, status=201)
     except Exception as e:
-        logger.error(f"CREATE TASK ERROR: {str(e)}")
-        return Response({"error": str(e)}, status=500)
+        logger.error(f"views: CREATE TASK ERROR: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=400)
 
 
 @api_view(['GET'])
@@ -487,130 +421,53 @@ def update_task_status(request):
     try:
         task_id = request.data.get('task_id')
         new_status = request.data.get('status')
-        # pyrefly: ignore [missing-attribute]
-        task = Task.objects.get(id=task_id)
-        task.status = new_status
-        task.save()
+        logger.info(f"views: update_task_status called for task {task_id} -> {new_status}")
+        TaskService.update_task_status(task_id, new_status)
         return Response({"message": "Status updated successfully!"}, status=200)
-    # pyrefly: ignore [missing-attribute]
-    except Task.DoesNotExist:
-        return Response({"error": "Task not found"}, status=404)
+    except Exception as e:
+        logger.error(f"views: UPDATE TASK STATUS ERROR: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=400)
 @api_view(['POST'])
 def log_daily_effort(request):
-    task_id = request.data.get('task_id')
-    hours_added = float(request.data.get('hours_added', 0))
-    username = request.data.get('username')
-    log_date = request.data.get('log_date', date.today())
-
-    # Basic Validation
-    if hours_added <= 0:
-        return Response({"success": False, "message": "Hours must be greater than 0"}, status=400)
-
     try:
-        # pyrefly: ignore [bad-context-manager]
-        with transaction.atomic():
-            # select_for_update()
-            # pyrefly: ignore [missing-attribute]
-            task = Task.objects.select_for_update().get(id=task_id)
-            user = User.objects.get(username=username)
-
-            # pyrefly: ignore [missing-attribute]
-            total_today = DailyEffortLog.objects.filter(
-                user=user,
-                log_date=log_date
-            ).aggregate(total=models.Sum('hours_added'))['total'] or 0
-
-            # 2. Daily Limit Check (9 hours limit)
-            if float(total_today) + hours_added >24:
-                return Response({
-                    "success": False,
-                    "message": f"Daily limit exceed! You already logged {total_today}h today."
-                }, status=400)
-
-            task.hours_logged = float(task.hours_logged or 0) + hours_added
-            task.save()
-
-            # pyrefly: ignore [missing-attribute]
-            DailyEffortLog.objects.create(
-                task=task,
-                user=user,
-                hours_added=hours_added,
-                log_date=log_date
-            )
-
-            # Calculation for response
-            remaining = float(task.total_estimated_hours or 0) - float(task.hours_logged or 0)
-
-            return Response({
-                "success": True,
-                "message": "Effort logged successfully!",
-                "total_logged": task.hours_logged,
-                "remaining": max(0, remaining)
-            }, status=200)
-
-    # pyrefly: ignore [missing-attribute]
-    except Task.DoesNotExist:
-        return Response({"success": False, "message": "Task not found"}, status=404)
-    # pyrefly: ignore [missing-attribute]
-    except User.DoesNotExist:
-        return Response({"success": False, "message": "User not found"}, status=404)
+        task_id = request.data.get('task_id')
+        hours_added = float(request.data.get('hours_added', 0))
+        username = request.data.get('username')
+        log_date = request.data.get('log_date', date.today())
+        
+        logger.info(f"views: log_daily_effort called for task {task_id} by {username}")
+        task, remaining = TaskService.log_daily_effort(task_id, hours_added, username, log_date)
+        return Response({
+            "success": True,
+            "message": "Effort logged successfully!",
+            "total_logged": task.hours_logged,
+            "remaining": max(0, remaining)
+        }, status=200)
     except Exception as e:
-        # Error logging for debugging
-        logger.error(f"Log Effort Error: {str(e)}")
-        return Response({"success": False, "message": str(e)}, status=500)
+        logger.error(f"views: LOG EFFORT ERROR: {str(e)}", exc_info=True)
+        return Response({"success": False, "message": str(e)}, status=400)
 
 
 @api_view(['POST'])
 def update_task_status_with_tracker(request):
-    task_id = request.data.get('task_id')
-    new_status = request.data.get('status')
-
-    if not task_id or not new_status:
-        return Response({"error": "Missing task_id or status"}, status=400)
-
     try:
-        # 1. Task Fetch aur Update
-        # pyrefly: ignore [missing-attribute]
-        task = Task.objects.get(id=task_id)
-        old_status = task.status
-        task.status = new_status
-        task.last_moved_date = timezone.now().date()
-
-        if new_status == 'In Progress' and not getattr(task, 'start_date', None):
-            task.start_date = timezone.now().date()
-
-        task.save()
-
-        # 2. Update Project and Program status to "In Progress" if first task begins
-        project = task.project
-        if new_status == 'In Progress' and project.status != 'In Progress':
-            project.status = 'In Progress'
-            project.save()
+        task_id = request.data.get('task_id')
+        new_status = request.data.get('status')
+        if not task_id or not new_status:
+            return Response({"error": "Missing task_id or status"}, status=400)
             
-            program = project.program
-            if program.status != 'In Progress':
-                program.status = 'In Progress'
-                program.save()
-
-        # 3. Progress Calculation
-        project_tasks = Task.objects.filter(project=project)
-        total_count = project_tasks.count()
-        done_count = project_tasks.filter(status='Done').count()
-        progress_percent = (done_count / total_count * 100) if total_count > 0 else 0
-
+        logger.info(f"views: update_task_status_with_tracker called for task {task_id} -> {new_status}")
+        res = TaskService.update_task_status_with_tracker(task_id, new_status)
         return Response({
             "success": True,
-            "message": f"Task moved from {old_status} to {new_status}",
-            "new_status": task.status,
-            "project_progress": progress_percent,
-            "project_status": project.status
+            "message": f"Task moved from {res['old_status']} to {res['task'].status}",
+            "new_status": res['task'].status,
+            "project_progress": res['progress_percent'],
+            "project_status": res['project_status']
         })
-
-    # pyrefly: ignore [missing-attribute]
-    except Task.DoesNotExist:
-        return Response({"error": "Task not found"}, status=404)
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        logger.error(f"views: UPDATE TASK TRACKER ERROR: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=400)
     
     
 
@@ -880,39 +737,18 @@ def get_pm_dashboard_stats(request):
         return Response(stats_data)
 @api_view(['POST'])
 def update_sprint_status(request):
-    sprint_id = request.data.get('sprint_id')
-    new_status = request.data.get('status')
-    
-    if not sprint_id or not new_status:
-        return Response({"error": "Missing sprint_id or status"}, status=400)
-    
     try:
-        with transaction.atomic():
-            sprint = Sprint.objects.get(id=sprint_id)
-            sprint.status = new_status
-            sprint.save()
+        sprint_id = request.data.get('sprint_id')
+        new_status = request.data.get('status')
+        if not sprint_id or not new_status:
+            return Response({"error": "Missing sprint_id or status"}, status=400)
             
-            if new_status == 'In Progress':
-                project = sprint.project
-                if project.status != 'In Progress':
-                    project.status = 'In Progress'
-                    project.save()
-                
-                # Keep program status as is to avoid breaking PGM dashboard logic
-                
-                # Notify Project Manager
-                pm_user = project.created_by
-                if pm_user:
-                    Notification.objects.create(
-                        user=pm_user,
-                        message=f"🚀 Sprint '{sprint.name}' has been started by a Team Member for project '{project.name}'."
-                    )
-                    
-            return Response({"success": True, "message": f"Sprint status updated to {new_status}"})
-    except Sprint.DoesNotExist:
-        return Response({"error": "Sprint not found"}, status=404)
+        logger.info(f"views: update_sprint_status called for {sprint_id} -> {new_status}")
+        SprintService.update_sprint_status(sprint_id, new_status)
+        return Response({"success": True, "message": f"Sprint status updated to {new_status}"})
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        logger.error(f"views: UPDATE SPRINT STATUS ERROR: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=400)
 
 @api_view(['GET'])
 def get_user_profile(request):
@@ -950,14 +786,17 @@ def get_notifications(request):
 
 @api_view(['POST'])
 def mark_notifications_read(request):
-    username = request.data.get('username')
-    if not username:
-        return Response({"success": False})
     try:
-        Notification.objects.filter(user__username=username, is_read=False).update(is_read=True)
+        username = request.data.get('username')
+        if not username:
+            return Response({"success": False})
+            
+        logger.info(f"views: mark_notifications_read called for {username}")
+        NotificationService.mark_notifications_read(username)
         return Response({"success": True})
     except Exception as e:
-        return Response({"success": False, "error": str(e)})
+        logger.error(f"views: MARK NOTIFICATIONS READ ERROR: {str(e)}", exc_info=True)
+        return Response({"success": False, "error": str(e)}, status=400)
 @api_view(['GET'])
 def get_team_performance(request):
     manager_username = request.query_params.get('username')
@@ -985,80 +824,33 @@ def get_all_resources(request):
 
 @api_view(['POST'])
 def post_project_update_note(request):
-    project_id = request.data.get('project_id')
-    note = request.data.get('note')
     try:
-        project = Project.objects.get(id=project_id)
-        project.latest_update_note = note
-        project.save()
+        project_id = request.data.get('project_id')
+        note = request.data.get('note')
+        logger.info(f"views: post_project_update_note called for {project_id}")
         
-        # Notify all assigned team members
-        team_members = TeamMember.objects.filter(project=project)
-        for tm in team_members:
-            Notification.objects.create(
-                user=tm.user,
-                message=f"PM_ADD: [Announcement] Project Manager updated: \"{note}\""
-            )
-            
+        ProjectService.post_project_update_note(project_id, note)
         return Response({"success": True})
-    except Project.DoesNotExist:
-        return Response({"error": "Project not found"}, status=404)
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        logger.error(f"views: POST UPDATE NOTE ERROR: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=400)
 
 
 @api_view(['POST'])
 def request_additional_sprint(request):
-    from datetime import datetime
-    project_id = request.data.get('project_id')
-    sprint_id = request.data.get('sprint_id')
-    name = request.data.get('name')
-    start_date = request.data.get('start_date')
-    end_date = request.data.get('end_date')
     try:
-        project = Project.objects.get(id=project_id)
+        project_id = request.data.get('project_id')
+        sprint_id = request.data.get('sprint_id')
+        name = request.data.get('name')
+        start_date = request.data.get('start_date')
+        end_date = request.data.get('end_date')
         
-        # Date Validation
-        s_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-        e_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-        if s_date < project.start_date or e_date > project.end_date:
-            return Response({"error": f"Sprint timeline must be within project timeline ({project.start_date} to {project.end_date})"}, status=400)
-            
-        if sprint_id:
-            sprint = Sprint.objects.get(id=sprint_id)
-            sprint.name = name
-            sprint.start_date = start_date
-            sprint.end_date = end_date
-            sprint.status = 'Pending Approval'
-            sprint.return_note = ''
-            sprint.save()
-            action_msg = "resubmitted"
-        else:
-            sprint = Sprint.objects.create(
-                project=project,
-                name=name,
-                start_date=start_date,
-                end_date=end_date,
-                status='Pending Approval'
-            )
-            action_msg = "requested"
-        
-        # Notify Program Manager (PGM)
-        from django.contrib.auth.models import User
-        pgm_users = User.objects.filter(profile__role='PGM')
-        for pgm_user in pgm_users:
-            Notification.objects.create(
-                user=pgm_user,
-                message=f"SPRINT_UPDATE: Sprint '{name}' was {action_msg} for active project '{project.name}' by PM."
-            )
-            
+        logger.info(f"views: request_additional_sprint called for project {project_id}")
+        sprint, action_msg = SprintService.request_additional_sprint(project_id, sprint_id, name, start_date, end_date)
         return Response({"success": True, "message": f"Sprint successfully {action_msg} for PGM approval"})
-    except Project.DoesNotExist:
-        return Response({"error": "Project not found"}, status=404)
-    except Sprint.DoesNotExist:
-        return Response({"error": "Sprint not found"}, status=404)
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        logger.error(f"views: REQUEST ADDITIONAL SPRINT ERROR: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=400)
 
 
 @api_view(['GET'])
@@ -1085,48 +877,17 @@ def get_pending_additional_sprints(request):
 
 @api_view(['POST'])
 def review_additional_sprint(request):
-    sprint_id = request.data.get('sprint_id')
-    decision = request.data.get('decision') # 'Approved' or 'Returned'
-    return_note = request.data.get('return_note', '')
     try:
-        sprint = Sprint.objects.get(id=sprint_id)
-        if decision == 'Approved':
-            sprint.status = 'Approved'
-            sprint.save()
-            
-            # Notify PM
-            pm_user = sprint.project.created_by
-            if pm_user:
-                Notification.objects.create(
-                    user=pm_user,
-                    message=f"SPRINT_APPROVED: Additional sprint '{sprint.name}' for project '{sprint.project.name}' was approved by PGM."
-                )
-                
-            # Notify Team Members
-            team_members = TeamMember.objects.filter(project=sprint.project)
-            for tm in team_members:
-                Notification.objects.create(
-                    user=tm.user,
-                    message=f"SPRINT_ADDED: New sprint '{sprint.name}' has been added to project '{sprint.project.name}'."
-                )
-        else:
-            sprint.status = 'Returned'
-            sprint.return_note = return_note
-            sprint.save()
-            
-            # Notify PM
-            pm_user = sprint.project.created_by
-            if pm_user:
-                Notification.objects.create(
-                    user=pm_user,
-                    message=f"SPRINT_RETURNED: Additional sprint '{sprint.name}' for project '{sprint.project.name}' was returned. Note: {return_note}"
-                )
-                
+        sprint_id = request.data.get('sprint_id')
+        decision = request.data.get('decision')
+        return_note = request.data.get('return_note', '')
+        
+        logger.info(f"views: review_additional_sprint called for sprint {sprint_id} decision {decision}")
+        SprintService.review_additional_sprint(sprint_id, decision, return_note)
         return Response({"success": True})
-    except Sprint.DoesNotExist:
-        return Response({"error": "Sprint not found"}, status=404)
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        logger.error(f"views: REVIEW ADDITIONAL SPRINT ERROR: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=400)
 
 
 # --- AUTOMATED PROGRAM BULK IMPORT ENDPOINTS ---
