@@ -2,6 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, LineChart, Line, CartesianGrid, BarChart, Bar, Legend } from 'recharts';
 import ProgramTrackerModal from './common/ProgramTrackerModal';
 import NotificationPanel from './common/NotificationPanel';
+import {
+  layoutContainer, sidebarStyle, sidebarScrollArea, logoBox, sbItem, activeSbItem,
+  topHeaderStyle, mainContentStyle, logoutBtnSide, sectionTitle,
+  alertHeader, tableContainer, tableStyle, theadStyle, thStyle, tdStyle, trStyle,
+  primBtn, reviewBtn, secBtn, assignBtn, miniSelect, modalOverlay, modalBox, lbl,
+  valText, reviewGrid, miniTableContainer, miniTh, statusBadge
+} from './common/DashboardStyles';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
@@ -428,109 +435,16 @@ const StatBox = ({ label, val, color }) => (
 );
 
 // --- Styles ---
-const sidebarStyle = { 
-  width: '240px', 
-  backgroundColor: '#1B3A6B', 
-  color: '#fff', 
-  display: 'flex', 
-  flexDirection: 'column', 
-  flexShrink: 0, 
-  position: 'fixed', 
-  height: '100vh', 
-  left: 0, 
-  top: 0, 
-  zIndex: 100, 
-  borderRight: '1px solid #1e293b' 
-};
-const sidebarScrollArea = { 
-  flex: 1, 
-  overflowY: 'auto',
-  padding: '20px 0'
-};
-const logoBox = { 
-  display: 'flex', 
-  flexDirection: 'column', 
-  gap: '2px', 
-  padding: '25px 20px', 
-  borderBottom: '1px solid rgba(255,255,255,0.1)' 
-};
-const sbItem = {
-  padding: '12px 20px',
-  marginLeft: '10px',
-  marginRight: '10px',
-  marginBottom: '4px',
-  borderRadius: '8px',
-  fontSize: '13px',
-  fontWeight: '500',
-  color: '#cbd5e1',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  transition: 'all 0.2s',
-  borderLeft: '4px solid transparent',
-  fontFamily: "'Inter', 'Segoe UI', sans-serif"
-};
-const activeSbItem = {
-  ...sbItem,
-  backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  color: '#fff',
-  fontWeight: '600',
-  borderLeft: '4px solid #60A5FA',
-  borderRadius: '0 8px 8px 0',
-  marginLeft: '0',
-  paddingLeft: '16px'
-};
-const topHeaderStyle = { 
-  padding: '20px 25px', 
-  background: '#fff', 
-  borderBottom: '1px solid #e2e8f0', 
-  display: 'flex', 
-  justifyContent: 'space-between', 
-  alignItems: 'center' 
-};
-const mainContentStyle = { 
-  flex: 1, 
-  marginLeft: '240px', 
-  overflowY: 'auto', 
-  backgroundColor: '#F4F7FB', 
-  minHeight: '100vh' 
-};
-const logoutBtnSide = { 
-  margin: '20px 15px', 
-  background: 'transparent', 
-  border: '1px solid #ef4444', 
-  color: '#ef4444', 
-  padding: '12px', 
-  borderRadius: '8px', 
-  cursor: 'pointer', 
-  fontWeight: 'bold', 
-  transition: 'all 0.2s',
-  textAlign: 'center'
-};
-
+// All shared styles are cleanly imported from DashboardStyles.js above
 const logoutBtnStyle = { background: '#EF4444', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' };
 const cardGrid = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px', padding: '30px' };
 const summCard = (active) => ({ backgroundColor: '#fff', padding: '25px', borderRadius: '12px', border: active ? '2px solid #2563EB' : '1px solid #ddd', cursor: 'pointer', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' });
 const cardLabel = { fontSize: '13px', color: '#64748B', marginTop: '8px', fontWeight: 'bold' };
-const sectionTitle = { color: '#1B3A6B', marginBottom: '20px', fontSize: '16px', fontWeight: 'bold' };
-const tableContainer = { backgroundColor: '#fff', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', overflow: 'hidden' };
-const tableStyle = { width: '100%', borderCollapse: 'collapse' };
-const theadStyle = { backgroundColor: '#f8fafc', borderBottom: '2px solid #edf2f7' };
-const thStyle = { padding: '15px 20px', textAlign: 'left', fontSize: '12px', color: '#64748B', textTransform: 'uppercase' };
-const tdStyle = { padding: '15px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' };
-const trStyle = { transition: 'background 0.2s' };
+
 const btnApprove = { backgroundColor: '#10B981', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' };
 const btnReject = { backgroundColor: '#EF4444', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' };
 const btnDoc = { backgroundColor: '#F1F5F9', border: '1px solid #CBD5E1', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer' };
 const btnHistoryDoc = { backgroundColor: '#E0F2FE', color: '#0369A1', border: '1px solid #7DD3FC', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer' };
-
-const statusBadge = (s) => {
-  const status = s?.toLowerCase();
-  let colors = { backgroundColor: '#FEF3C7', color: '#92400E' };
-  if (status === 'approved') colors = { backgroundColor: '#DCFCE7', color: '#166534' };
-  if (status === 'rejected') colors = { backgroundColor: '#FEE2E2', color: '#991B1B' };
-  return { padding: '5px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', ...colors };
-};
 
 const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 };
 const modalContentStyle = { background: '#fff', padding: '40px', borderRadius: '20px', position: 'relative' };

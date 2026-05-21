@@ -12,10 +12,16 @@ urlpatterns = [
     path('', include(router.urls)),
     path('login/', views.login_api),
     path('all-programs/', views.get_all_programs, name='all-programs'),
+    path('get-all-programs/', views.get_all_programs, name='get_all_programs'),
     path('create-program/', views.create_program, name='create_program'),
     path('update-program-status/', views.update_program_status, name='update_status'),
     path('parse-program-import/', views.parse_program_import, name='parse_program_import'),
     path('commit-program-import/', views.commit_program_import, name='commit_program_import'),
+    
+    path('create-project-plan/', views.create_project_plan, name='create_project_plan'),
+    path('get-project-managers/', views.get_project_managers, name='get_project_managers'),
+    path('assign-pm/', views.assign_project_manager, name='assign_pm'),
+    path('get-pending-projects/', views.get_pending_projects, name='get_pending_projects'),
 
 
     path('my-assigned-programs/', views.my_assigned_programs, name='my_assigned_programs'),

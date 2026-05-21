@@ -5,6 +5,13 @@ import ResourceAnalytics from './common/ResourceAnalytics';
 import PerformanceDashboard from './common/PerformanceDashboard';
 import ProgramTrackerModal from './common/ProgramTrackerModal';
 import { Chart } from "react-google-charts";
+import {
+  layoutContainer, sidebarStyle, sidebarScrollArea, logoBox, sbItem, activeSbItem,
+  topHeaderStyle, mainContentStyle, logoutBtnSide, cardGrid, summCard, sectionTitle,
+  alertHeader, tableContainer, tableStyle, theadStyle, thStyle, tdStyle, trStyle,
+  primBtn, reviewBtn, secBtn, assignBtn, miniSelect, modalOverlay, modalBox, lbl, inp,
+  valText, reviewGrid, miniTableContainer, miniTh, logoutBtnStyle, statusBadge
+} from './common/DashboardStyles';
 
 // 1. Helper function for health status colors
 const getStatusColor = (endDate) => {
@@ -1628,106 +1635,9 @@ const lastStatItem = {
 };
 
 // --- PREMIUM STYLES (MATCHING PGM DESIGN) ---
-const layoutContainer = { 
-  display: 'flex', 
-  minHeight: '100vh', 
-  backgroundColor: '#f8fafc', 
-  fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
-  overflow: 'hidden'
-};
-const sidebarStyle = { 
-  width: '240px', 
-  backgroundColor: '#1B3A6B', 
-  color: '#fff', 
-  display: 'flex', 
-  flexDirection: 'column', 
-  flexShrink: 0, 
-  position: 'fixed', 
-  height: '100vh', 
-  left: 0, 
-  top: 0, 
-  zIndex: 100, 
-  borderRight: '1px solid #1e293b' 
-};
-const sidebarScrollArea = { 
-  flex: 1, 
-  overflowY: 'auto',
-  padding: '20px 0'
-};
-const logoBox = { 
-  display: 'flex', 
-  flexDirection: 'column', 
-  gap: '2px', 
-  padding: '25px 20px', 
-  borderBottom: '1px solid rgba(255,255,255,0.1)' 
-};
-const sbItem = {
-  padding: '12px 20px',
-  marginLeft: '10px',
-  marginRight: '10px',
-  marginBottom: '4px',
-  borderRadius: '8px',
-  fontSize: '13px',
-  fontWeight: '500',
-  color: '#cbd5e1',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  transition: 'all 0.2s',
-  borderLeft: '4px solid transparent',
-  fontFamily: "'Inter', 'Segoe UI', sans-serif"
-};
-const activeSbItem = {
-  ...sbItem,
-  backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  color: '#fff',
-  fontWeight: '600',
-  borderLeft: '4px solid #60A5FA',
-  borderRadius: '0 8px 8px 0',
-  marginLeft: '0',
-  paddingLeft: '16px'
-};
-const topHeaderStyle = { 
-  padding: '20px 25px', 
-  background: '#fff', 
-  borderBottom: '1px solid #e2e8f0', 
-  display: 'flex', 
-  justifyContent: 'space-between', 
-  alignItems: 'center' 
-};
-const mainContentStyle = { 
-  flex: 1, 
-  marginLeft: '240px', 
-  overflowY: 'auto', 
-  backgroundColor: '#F4F7FB', 
-  minHeight: '100vh' 
-};
-const logoutBtnSide = { 
-  margin: '20px 15px', 
-  background: 'transparent', 
-  border: '1px solid #ef4444', 
-  color: '#ef4444', 
-  padding: '12px', 
-  borderRadius: '8px', 
-  cursor: 'pointer', 
-  fontWeight: 'bold', 
-  transition: 'all 0.2s',
-  textAlign: 'center'
-};
+// All shared styles are cleanly imported from DashboardStyles.js above
 const userCircleStyle = { width: '35px', height: '35px', borderRadius: '50%', backgroundColor: '#2563EB', color: '#fff', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold' };
 
-const sectionTitle = { fontSize: '16px', fontWeight: '800', color: '#1B3A6B', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' };
-const tableContainer = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' };
-const tableStyle = { width: '100%', borderCollapse: 'collapse' };
-const theadStyle = { background: '#f8fafc', borderBottom: '1px solid #e2e8f0' };
-const thStyle = { padding: '15px', textAlign: 'left', color: '#64748B', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase' };
-const trStyle = { borderBottom: '1px solid #f1f5f9', transition: '0.2s' };
-const tdStyle = { padding: '15px', fontSize: '13px', color: '#475569' };
-
-const primBtn = { background: '#2563EB', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '13px' };
-const secBtn = { background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '8px 18px', borderRadius: '6px', cursor: 'pointer' };
-
-const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 };
 const modalContentStyle = { background: '#fff', padding: '30px', borderRadius: '15px', position: 'relative' };
 
 const liveStatCard = (color) => ({ background: '#fff', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0', borderTop: `4px solid ${color}` });
@@ -1763,7 +1673,5 @@ const miniTheadStyle = { borderBottom: '2px solid #f1f5f9' };
 const miniThStyle = { padding: '10px', textAlign: 'left', fontSize: '11px', color: '#64748b', textTransform: 'uppercase' };
 const miniTrStyle = { borderBottom: '1px solid #f1f5f9' };
 const miniTdStyle = { padding: '10px', fontSize: '13px', color: '#475569' };
-const lbl = { display: 'block', fontSize: '11px', fontWeight: '800', marginBottom: '6px', color: '#64748B' };
-const inp = { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px' };
 
 export default PMDashboard;
