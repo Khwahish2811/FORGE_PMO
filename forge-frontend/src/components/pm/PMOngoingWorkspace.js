@@ -117,7 +117,7 @@ export default function PMOngoingWorkspace({
         <thead style={theadStyle}>
           <tr>
             <th style={thStyle}>PROJECT NAME</th>
-            <th style={thStyle}>PROGRAM</th>
+            <th style={thStyle}>PROGRAM MANAGER</th>
             <th style={thStyle}>TEAM STACK</th>
             <th style={thStyle}>STATUS</th>
             <th style={thStyle}>ACTIONS</th>
@@ -141,7 +141,7 @@ export default function PMOngoingWorkspace({
                   </td>
                   <td style={tdStyle}>
                     <span style={{ fontSize: '13px', color: '#475569', fontWeight: '600' }}>
-                      {project.program?.name || 'Unlinked Program'}
+                      {project.program_manager_name || 'Unlinked'}
                     </span>
                   </td>
                   <td style={tdStyle}>

@@ -54,6 +54,7 @@ class SprintSerializer(serializers.ModelSerializer):
 class ProjectSerializer(serializers.ModelSerializer):
     program_name = serializers.ReadOnlyField(source='program.name', default="N/A")
     pm_name = serializers.ReadOnlyField(source='created_by.username', default="Unknown")
+    program_manager_name = serializers.ReadOnlyField(source='program.manager_name', default="N/A")
 
 
     team_members = serializers.SerializerMethodField()
@@ -63,7 +64,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = [
-            'id', 'program', 'program_name', 'name', 'description',
+            'id', 'program', 'program_name', 'program_manager_name', 'name', 'description',
             'start_date', 'end_date', 'priority', 'status', 'created_by', 'pm_name',
             'team_members', 'sprints', 'total_tasks'
         ]
